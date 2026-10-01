@@ -203,6 +203,39 @@ theorem CovT.of_exact (hD : 0 < D) (hS : 0 < S) (hR : 0 < R) {lf : LemmaELeaf.Ex
     CovT D S Mq R W pts segs rects x0 x1 y0 y1 u0 u1 :=
   CovT.of_covMPo (LemmaELeaf.CovMPo.of_exact hD hS hR h)
 
+/-! ## The face `θ = 0` -/
+
+/-- At `θ = 0` an admissible centre has `c₁ ≥ 1/2`: the face box may start at any `m ≤ Q/2`. -/
+theorem CovMP.face_wallX {m : ℕ} (hD : 0 < D) (hS : 0 < S) (hm : 2 * m ≤ D * S)
+    (h : CovMP D S Mq R W pts segs rects m x1 y0 y1 0 0) :
+    CovMP D S Mq R W pts segs rects x0 x1 y0 y1 0 0 := by
+  intro c u _ hx1 hy0 hy1 hu0 hu1 hsub
+  have hRu : u = 0 := by
+    simp only [Nat.cast_zero, zero_div] at hu0 hu1; linarith
+  subst hRu
+  obtain ⟨wx, _⟩ := adm_lo hsub
+  rw [Real.arctan_zero, mul_zero] at wx
+  simp only [wid, Real.cos_zero, Real.sin_zero, abs_one, abs_zero, add_zero] at wx
+  refine h c 0 ?_ hx1 hy0 hy1 hu0 hu1 hsub
+  have hQ : (0 : ℝ) < D * S := by positivity
+  have hmr : (2 * m : ℝ) ≤ D * S := by exact_mod_cast hm
+  rw [div_le_iff₀ hQ]; nlinarith
+
+theorem CovMP.face_wallY {m : ℕ} (hD : 0 < D) (hS : 0 < S) (hm : 2 * m ≤ D * S)
+    (h : CovMP D S Mq R W pts segs rects x0 x1 m y1 0 0) :
+    CovMP D S Mq R W pts segs rects x0 x1 y0 y1 0 0 := by
+  intro c u hx0 hx1 _ hy1 hu0 hu1 hsub
+  have hRu : u = 0 := by
+    simp only [Nat.cast_zero, zero_div] at hu0 hu1; linarith
+  subst hRu
+  obtain ⟨_, wy⟩ := adm_lo hsub
+  rw [Real.arctan_zero, mul_zero] at wy
+  simp only [wid, Real.cos_zero, Real.sin_zero, abs_one, abs_zero, add_zero] at wy
+  refine h c 0 hx0 hx1 ?_ hy1 hu0 hu1 hsub
+  have hQ : (0 : ℝ) < D * S := by positivity
+  have hmr : (2 * m : ℝ) ≤ D * S := by exact_mod_cast hm
+  rw [div_le_iff₀ hQ]; nlinarith
+
 /-! ## The end-to-end lower bound from the pose tree -/
 
 /-- `θ ∈ [0, π/4]` is `2 arctan u` with `u ≥ 0`, `70u ≤ 29` and `u² + 2u ≤ 1`. -/
