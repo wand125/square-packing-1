@@ -288,6 +288,20 @@ def sideL (Q x0 x1 y0 y1 : ℕ) (wx wy : Bool) : List PL :=
     if wy then ([0], smul 2 Np, smul (-1) (BernZ.add Cp Sp)) else ([0], [(Q : ℤ)], [-(y0 : ℤ)]),
     ([0], [-(Q : ℤ)], [(y1 : ℤ)])]
 
+/-- The wall lines `c₁ ≥ w/2`, `c₂ ≥ w/2` (`w = (C + S)/N`). -/
+def wallX : PL := (smul 2 Np, [0], smul (-1) (BernZ.add Cp Sp))
+def wallY : PL := ([0], smul 2 Np, smul (-1) (BernZ.add Cp Sp))
+
+/-- The region with extra wall constraints (`ex`, `ey`): for a box whose side the wall crosses
+inside the bin, both the side and the wall bound the admissible centres. -/
+def sideE (Q x0 x1 y0 y1 : ℕ) (wx wy ex ey : Bool) : List PL :=
+  sideL Q x0 x1 y0 y1 wx wy ++ ((if ex then [wallX] else []) ++ (if ey then [wallY] else []))
+
+lemma poly_sideE_sub {Q x0 x1 y0 y1 : ℕ} {wx wy ex ey : Bool} (u : ℝ) :
+    poly ((sideE Q x0 x1 y0 y1 wx wy ex ey).map (evalPL · u)) ⊆
+      poly ((sideL Q x0 x1 y0 y1 wx wy).map (evalPL · u)) := fun p hp C hC =>
+  hp C (by simp only [sideE, List.map_append, List.mem_append]; exact Or.inl hC)
+
 /-- The lower ends of the region (`RF`s without `Δ`). -/
 def loX (Q x0 : ℕ) (wx : Bool) : RF := if wx then ⟨BernZ.add Cp Sp, 0, 0, 0, 1, 2⟩ else RF.const x0 Q
 
@@ -550,6 +564,8 @@ structure ExLeaf where
   hbx : List (List ℕ × List ℕ)
   vbx : List (List ℕ × List ℕ)
   certs : List (List PairCert)
+  ex : Bool := false
+  ey : Bool := false
 
 def hFormsSLs (D : ℕ) (e : SegE) : List SL :=
   formsSL (SL.cst e.1 D) (SL.cst e.2.2.1 D) (hTA D e.2.1) (hTB D e.2.1) (hTC D e.2.1) (hTD D e.2.1)
@@ -735,7 +751,7 @@ lemma cornerOk_sound {Q x0 x1 y0 y1 U0 U1 R D : ℕ} (hQ : 0 < Q) (hR : 0 < R) (
 /-- **The `EXACT` leaf test.** -/
 def exOk (D S R W x0 x1 y0 y1 U0 U1 : ℕ) (segs : List SegE) (rects : List RectE) (lf : ExLeaf) :
     Bool :=
-  let side := sideL (D * S) x0 x1 y0 y1 lf.wx lf.wy
+  let side := sideE (D * S) x0 x1 y0 y1 lf.wx lf.wy lf.ex lf.ey
   let pin := pinOk (D * S) x0 x1 y0 y1 U0 U1 R lf.wx lf.wy lf.Ls
   Nat.blt U1 R && Nat.ble U0 U1 && decide (lf.chs ++ lf.cvs).Nodup && decide (lf.crs.map Prod.fst).Nodup &&
     lf.chs.all (fun e => segs.contains e && e.2.1 == e.2.2.2.1 && Nat.blt e.1 e.2.2.1 &&
@@ -757,7 +773,7 @@ def exOk (D S R W x0 x1 y0 y1 U0 U1 : ℕ) (segs : List SegE) (rects : List Rect
 /-- Everything in `exOk` except the pair certificates. -/
 def exHead (D S R W x0 x1 y0 y1 U0 U1 : ℕ) (segs : List SegE) (rects : List RectE) (lf : ExLeaf) :
     Bool :=
-  let side := sideL (D * S) x0 x1 y0 y1 lf.wx lf.wy
+  let side := sideE (D * S) x0 x1 y0 y1 lf.wx lf.wy lf.ex lf.ey
   let pin := pinOk (D * S) x0 x1 y0 y1 U0 U1 R lf.wx lf.wy lf.Ls
   Nat.blt U1 R && Nat.ble U0 U1 && decide (lf.chs ++ lf.cvs).Nodup && decide (lf.crs.map Prod.fst).Nodup &&
     lf.chs.all (fun e => segs.contains e && e.2.1 == e.2.2.2.1 && Nat.blt e.1 e.2.2.1 &&
@@ -777,8 +793,8 @@ def exHead (D S R W x0 x1 y0 y1 U0 U1 : ℕ) (segs : List SegE) (rects : List Re
 
 lemma exOk_of {D S R W x0 x1 y0 y1 U0 U1 : ℕ} {segs : List SegE} {rects : List RectE} {lf : ExLeaf}
     (h1 : exHead D S R W x0 x1 y0 y1 U0 U1 segs rects lf = true)
-    (h2 : allPairsOk D W R U0 U1 (sideL (D * S) x0 x1 y0 y1 lf.wx lf.wy) lf.chs lf.cvs lf.crs lf.hbx lf.vbx
-      (sideL (D * S) x0 x1 y0 y1 lf.wx lf.wy ++ lf.Ls) lf.certs = true) :
+    (h2 : allPairsOk D W R U0 U1 (sideE (D * S) x0 x1 y0 y1 lf.wx lf.wy lf.ex lf.ey) lf.chs lf.cvs lf.crs
+      lf.hbx lf.vbx (sideE (D * S) x0 x1 y0 y1 lf.wx lf.wy lf.ex lf.ey ++ lf.Ls) lf.certs = true) :
     exOk D S R W x0 x1 y0 y1 U0 U1 segs rects lf = true := by
   simp only [exHead] at h1
   simp only [exOk, h1, h2, Bool.and_self]
@@ -929,9 +945,36 @@ theorem CovMPo.of_exact {D S Mq R W x0 x1 y0 y1 U0 U1 : ℕ} {pts : List (ℕ ×
       · intro c; rw [aff_subF, aff_constF, val_sub _ _ dY ds hpos hlt, val_sSL one_ne_zero, ey, hsθ]
         simp
   -- 4. the vertex
+  have hsubE := poly_sideE_sub (Q := D * S) (x0 := x0) (x1 := x1) (y0 := y0) (y1 := y1) (wx := lf.wx)
+    (wy := lf.wy) (ex := lf.ex) (ey := lf.ey) u
+  have hcregE : c ∈ poly ((sideE (D * S) x0 x1 y0 y1 lf.wx lf.wy lf.ex lf.ey).map (evalPL · u)) := by
+    intro C hC
+    simp only [sideE, List.map_append, List.mem_append] at hC
+    rcases hC with hC | hC
+    · exact hcreg C hC
+    obtain ⟨a1, a2, a3, a4⟩ := hadm
+    rw [hwθ] at a1 a3
+    have hN : (0 : ℝ) < 1 + u ^ 2 := by positivity
+    have wX : 0 ≤ aff (evalPL wallX u) c := by
+      simp only [wallX, aff, evalPL, eval_smul, eval_Np, BernZ.eval_add, eval_Cp, eval_Sp, eval_cons,
+        eval_nil]
+      push_cast
+      rw [div_div, div_le_iff₀ (by positivity)] at a1; nlinarith
+    have wY : 0 ≤ aff (evalPL wallY u) c := by
+      simp only [wallY, aff, evalPL, eval_smul, eval_Np, BernZ.eval_add, eval_Cp, eval_Sp, eval_cons,
+        eval_nil]
+      push_cast
+      rw [div_div, div_le_iff₀ (by positivity)] at a3; nlinarith
+    cases hex : lf.ex <;> cases hey : lf.ey <;>
+      simp only [hex, hey, if_true, if_false, Bool.false_eq_true, List.map_cons, List.map_nil,
+        List.mem_cons, List.not_mem_nil, or_false] at hC
+    all_goals first
+      | exact hC.elim
+      | (rw [hC]; first | exact wX | exact wY)
+      | (rcases hC with h | h <;> first | exact h.elim | (rw [h]; first | exact wX | exact wY))
   obtain ⟨v, hv, ⟨C1, hC1, C2, hC2, hdet, ht1, ht2⟩, hle⟩ :=
-    exists_vertex_le_fE hs hc (region_bounded hQ lf.wx lf.wy u) hfix hcreg
-  set side := sideL (D * S) x0 x1 y0 y1 lf.wx lf.wy
+    exists_vertex_le_fE hs hc ((region_bounded hQ lf.wx lf.wy u).subset hsubE) (hfix.mono hsubE) hcregE
+  set side := sideE (D * S) x0 x1 y0 y1 lf.wx lf.wy lf.ex lf.ey
   have hmemL : ∀ C ∈ side.map (evalPL · u) ++ lf.Ls.map (evalPL · u),
       ∃ P ∈ side ++ lf.Ls, C = evalPL P u := by
     intro C hC
@@ -943,9 +986,10 @@ theorem CovMPo.of_exact {D S Mq R W x0 x1 y0 y1 U0 U1 : ℕ} {pts : List (ℕ ×
   obtain ⟨i, hi, hiA⟩ := List.mem_iff_getElem.mp hA
   obtain ⟨j, hj, hjB⟩ := List.mem_iff_getElem.mp hB
   have hdetAB : eval (detP A B) u ≠ 0 := by rw [eval_detP]; exact hdet
-  have hbd : ∀ p ∈ poly ((sideL (D * S) x0 x1 y0 y1 lf.wx lf.wy).map (evalPL · u)),
+  have hbd : ∀ p ∈ poly ((sideE (D * S) x0 x1 y0 y1 lf.wx lf.wy lf.ex lf.ey).map (evalPL · u)),
       BoxDom D u p lf.chs lf.cvs lf.hbx lf.vbx := by
     intro p hp
+    replace hp := hsubE hp
     refine ⟨fun q hq => ?_, fun q hq => ?_⟩
     · exact boxDom_sound hQ hR (hhb q hq) (hd_hUps hD q.1) (hd_hLos hD q.1) hpos hlt hb0 hu1 p hp
     · exact boxDom_sound hQ hR (hvb q hq) (hd_vUps hD q.1) (hd_vLos hD q.1) hpos hlt hb0 hu1 p hp

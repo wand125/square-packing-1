@@ -139,6 +139,15 @@ def Fixed (R : Set (ℝ × ℝ)) (s : ℝ) (Ls : List (ℝ × ℝ × ℝ)) (sts 
     (∀ l ∈ lts, 0 ≤ l.1 ∧ Pinned R Ls l.2.1 ∧ Pinned R Ls (subF l.2.1 (constF s)) ∧
       Pinned R Ls l.2.2.1 ∧ Pinned R Ls (subF l.2.2.1 (constF s)))
 
+lemma Fixed.mono {R R' : Set (ℝ × ℝ)} (hRR : R' ⊆ R) {s : ℝ} {Ls : List (ℝ × ℝ × ℝ)}
+    {sts : List SegT} {lts : List LebT} (h : Fixed R s Ls sts lts) : Fixed R' s Ls sts lts := by
+  have pm : ∀ {F}, Pinned R Ls F → Pinned R' Ls F := fun hF => hF.imp id fun h' =>
+    h'.imp (fun h1 p hp => h1 p (hRR hp)) (fun h1 p hp => h1 p (hRR hp))
+  obtain ⟨h1, h2⟩ := h
+  exact ⟨fun t ht => ⟨(h1 t ht).1, (h1 t ht).2.1, fun F hF => pm ((h1 t ht).2.2 F hF)⟩,
+    fun l hl => ⟨(h2 l hl).1, pm (h2 l hl).2.1, pm (h2 l hl).2.2.1, pm (h2 l hl).2.2.2.1,
+      pm (h2 l hl).2.2.2.2⟩⟩
+
 /-- The line `L` oriented to be `≥ 0` at `c`. -/
 noncomputable def orient (c : ℝ × ℝ) (L : ℝ × ℝ × ℝ) : ℝ × ℝ × ℝ :=
   if 0 ≤ aff L c then L else (-L.1, -L.2.1, -L.2.2)

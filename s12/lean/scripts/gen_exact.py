@@ -66,7 +66,11 @@ class Leaf:
             if w0 >= x / Q: return True
             return None
         self.wx, self.wy = wall(x0), wall(y0)
-        self.ok = self.wx is not None and self.wy is not None
+        # a wall crossing the box side inside the bin: keep the side and add the wall as a constraint
+        self.ex, self.ey = self.wx is None, self.wy is None
+        if self.ex: self.wx = False
+        if self.ey: self.wy = False
+        self.ok = True
         self.use_tan = Leaf.USE_TAN
         self.use_corner = Leaf.USE_CORNER
         if self.ok:
@@ -123,7 +127,7 @@ class Leaf:
             if cornersOk(Q, x0, x1, y0, y1, U0, U1, R, self.wx, self.wy, True, P): continue
             Ls.append(P)
         self.Ls = Ls
-        self.side = sideL(Q, x0, x1, y0, y1, self.wx, self.wy)
+        self.side = sideE(Q, x0, x1, y0, y1, self.wx, self.wy, self.ex, self.ey)
         import itertools
         def boxalts(ups, los):
             for k in (1, 2, 3):
@@ -422,7 +426,8 @@ def to_lean(lf, name):
             f"  Ls := [{', '.join(lPL(P) for P in lf.Ls)}]\n"
             f"  hbx := [{', '.join(lbx(b) for b in lf.hbx)}]\n"
             f"  vbx := [{', '.join(lbx(b) for b in lf.vbx)}]\n"
-            f"  certs := [\n    {rows}]\n")
+            f"  certs := [\n    {rows}]\n"
+            + ("  ex := true\n" if lf.ex else "") + ("  ey := true\n" if lf.ey else ""))
 
 
 
@@ -431,7 +436,7 @@ def to_lean_split(lf, name, segs="tsegs", rects="trects", rows_only=False):
     (or per row) and glued along `List.drop`."""
     x0, x1, y0, y1, U0, U1 = lf.box
     D, S, R, W, Q = lf.D, lf.S, lf.R, lf.W, lf.Q
-    side = f"(sideL {Q} {x0} {x1} {y0} {y1} {name}.wx {name}.wy)"
+    side = f"(sideE {Q} {x0} {x1} {y0} {y1} {name}.wx {name}.wy {name}.ex {name}.ey)"
     ctx = f"{D} {W} {R} {U0} {U1} {side} {name}.chs {name}.cvs {name}.crs {name}.hbx {name}.vbx"
     d0 = "(([0], [0], [0]) : PL)"
     q0 = "((([0], [0], [0]) : PL), PairCert.par)"

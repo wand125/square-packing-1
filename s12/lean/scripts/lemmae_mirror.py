@@ -485,6 +485,14 @@ def sideL(Q, x0, x1, y0, y1, wx, wy):
             ([0], [-Q], [y1])]
 
 
+wallX = (psmul(2, Np), [0], psmul(-1, padd(Cp, Sp)))
+wallY = ([0], psmul(2, Np), psmul(-1, padd(Cp, Sp)))
+
+
+def sideE(Q, x0, x1, y0, y1, wx, wy, ex, ey):
+    return sideL(Q, x0, x1, y0, y1, wx, wy) + ([wallX] if ex else []) + ([wallY] if ey else [])
+
+
 def cnum(x, w): return padd(Cp, Sp) if w else [x]
 def cden(Q, w): return psmul(2, Np) if w else [Q]
 
