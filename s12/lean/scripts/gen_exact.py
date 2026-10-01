@@ -126,11 +126,12 @@ class Leaf:
                 uv = [svals(L, u, v) for L in ups]; lv = [svals(L, u, v) for L in los]
                 mu = min(uv); ml = max(lv)
                 posl.append(mu - ml > 1e-12)
-                if mu - ml > -1e-6:
+                if mu - ml > -1e-9:
                     Ua |= {i for i in range(3) if uv[i] <= mu + tol}
                     La |= {i for i in range(3) if lv[i] >= ml - tol}
             if not any(posl): return [(('drop',), None)]
-            ch = ('box',) if len(bx[0]) * len(bx[1]) <= len(Ua) * len(La) else ('alt', sorted(Ua), sorted(La))
+            ch = ('box',) if len(bx[0]) * len(bx[1]) == 1 or len(bx[0]) * len(bx[1]) <= len(Ua) * len(La) \
+                else ('alt', sorted(Ua), sorted(La))
             if all(posl): return [(ch, None)]
             # mixed: tag by a split whose sign pattern matches
             for k, sp in enumerate(splits):
@@ -204,7 +205,13 @@ class Leaf:
                     return [(b1, sig, m, ('out', k, mm))]
             cert = self.choose(Dp, X, Y, b0, b1)
             args = (self.D, self.W, sig, Dp, X, Y, b0, b1, R, self.chs, self.cvs, self.crs, self.hbx, self.vbx)
-            if vertOk(*args, cert):
+            nc = 1
+            for l, bx in list(zip(cert[2], self.hbx)) + list(zip(cert[3], self.vbx)):
+                nc *= sum(len(bx[0]) * len(bx[1]) if x[0][0] == 'box' else
+                          (len(x[0][1]) * len(x[0][2]) if x[0][0] == 'alt' else 1) for x in l)
+            if nc > 16 and depth < self.maxdepth and b1 - b0 >= 2:
+                pass
+            elif vertOk(*args, cert):
                 self.stat['val'] += 1
                 return [(b1, sig, m, ('val', cert))]
             if cert[0]:
