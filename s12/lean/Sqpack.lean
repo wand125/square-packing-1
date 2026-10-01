@@ -21,6 +21,7 @@ import Sqpack.PolyMin
 import Sqpack.ChordE
 import Sqpack.LebE
 import Sqpack.LemmaE
+import Sqpack.RatU
 import Sqpack.SegParts
 import Sqpack.ZMTreeM
 import Sqpack.LemmaL
