@@ -190,12 +190,12 @@ def tanCap(Dn, n, m, P):
 
 
 def capXm(Dn, rm):
-    r, mx, _ = rm
+    r, mx = rm[0], rm[1]
     return capX(Dn, r[0]) if mx is None else tanCap(Dn, mx[0], mx[1], capX(Dn, r[0])[0])
 
 
 def capYm(Dn, rm):
-    r, _, my = rm
+    r, my = rm[0], rm[2]
     return capY(Dn, r[1]) if my is None else tanCap(Dn, my[0], my[1], capY(Dn, r[1])[0])
 
 
@@ -396,6 +396,48 @@ def lebRF(D, X, Y, Dn, r, ax, ay):
                                              rf_neg(capAU(D, X, Y, capYm(Dn, r), ay))))
 
 
+# corner kinds (LemmaEVert.slAtP / mcRF / lebRFs); a RectM is (rect, mx, my, ck),
+# ck = ('std',) | ('c3', xa, ya, ym, q) | ('xc', xa, ya, ym, q)
+def slAtP(L, x, y, q):
+    P = L[0]
+    return (padd(padd(psmul(x, P[0]), psmul(y, P[1])), psmul(q, P[2])), 0, L[1], L[2], L[3], L[4] * q)
+
+
+cRF = (Cp, 0, 0, 0, 1, 1)
+sRF = (Sp, 0, 0, 0, 1, 1)
+i2cRF = (Np, 0, 1, 0, 0, 2)
+
+
+def mcRF(D, A, B, bs, al, be):
+    t1 = rf_mul(rf_mul(rf_const(2, 1), cRF), rf_add(D, rf_add(D, rf_mul(A, be), rf_mul(B, al)), rf_neg(rf_mul(A, B))))
+    t2 = rf_mul(sRF, rf_add(D, rf_mul(rf_mul(rf_const(2, 1), bs), be), rf_neg(rf_mul(bs, bs))))
+    t3 = rf_neg(rf_mul(sRF, rf_mul(al, al)))
+    return rf_mul(i2cRF, rf_add(D, rf_add(D, t1, t2), t3))
+
+
+def lebRFs(D, X, Y, Dn, r, ax, ay):
+    w = rf_const(r[0][4], 1)
+    gx = rf_neg(capAU(D, X, Y, capXm(Dn, r), ax))
+    gy = rf_neg(capAU(D, X, Y, capYm(Dn, r), ay))
+    ck = r[3]
+    if ck[0] == 'std':
+        return [lebRF(D, X, Y, Dn, r, ax, ay)]
+    _, xa, ya, ym, q = ck
+    if ck[0] == 'c3':
+        aL = sl_sub(capX(Dn, r[0][0]), sSL(1)); bL = capY(Dn, r[0][1])
+        mc = mcRF(D, slAtP(aL, xa, ya, q), slAtP(bL, xa, ya, q), slAtP(bL, xa, ym, q),
+                  atV(sl_sub(capXm(Dn, r), sSL(1)), D, X, Y), atV(capYm(Dn, r), D, X, Y))
+        return [rf_mul(w, rf_add(D, rf_add(D, rf_add(D, rf_const(1, 1), gx), gy), mc)),
+                rf_mul(w, rf_add(D, rf_const(1, 1), gx))]
+    aL = capX(Dn, r[0][0]); bL = sl_sub(capY(Dn, r[0][1]), cSL(1))
+    mc = mcRF(D, slAtP(aL, xa, ya, q), slAtP(bL, xa, ya, q), slAtP(bL, xa, ym, q),
+              atV(capXm(Dn, r), D, X, Y), atV(sl_sub(capYm(Dn, r), cSL(1)), D, X, Y))
+    return [rf_mul(w, rf_add(D, rf_add(D, rf_const(1, 1), gy), mc)), lebRF(D, X, Y, Dn, r, ax, ay)]
+
+
+def ckOk(ck): return ck[0] == 'std' or 0 < ck[4]
+
+
 def vertOk(Dn, W, sigma, D, X, Y, b0, b1, R, chs, cvs, crs, hbx, vbx, c):
     splits, fcs, hc, vc, lc = c
     if len(hbx) != len(chs) or len(vbx) != len(cvs) or len(hc) != len(chs) or len(vc) != len(cvs) or len(lc) != len(crs):
@@ -420,8 +462,8 @@ def vertOk(Dn, W, sigma, D, X, Y, b0, b1, R, chs, cvs, crs, hbx, vbx, c):
             alts.append([t for x in l if tagOk(pat, x[1])
                          for t in segCAlts(D, X, Y, e[4], Dn, nat_sub(e[3], e[1]), vUps(Dn, e), vLos(Dn, e), bx, x[0])])
         for r, (xs, ys) in zip(crs, lc):
-            alts.append([lebRF(D, X, Y, Dn, r, ax, ay) for ax in xs if tagOk(pat, capTag(ax))
-                         for ay in ys if tagOk(pat, capTag(ay))])
+            alts.append([t for ax in xs if tagOk(pat, capTag(ax))
+                         for ay in ys if tagOk(pat, capTag(ay)) for t in lebRFs(D, X, Y, Dn, r, ax, ay)])
         sps = [sproc(D, X, Y, sp, b) for sp, b in zip(splits, pat)]
         for comb in cprod(alts):
             if not totOk(sigma, D, X, Y, b0, b1, R, splits, pat, fcs, sumRF(D, comb + sps + [rf_const(-W, 1)])):
@@ -485,6 +527,36 @@ def tanAx(Q, x0, x1, y0, y1, U0, U1, R, wx, wy, L, mo):
     return 0 < m and n <= m and \
         cornersOk(Q, x0, x1, y0, y1, U0, U1, R, wx, wy, False, sl_sub(L, sSL(1))[0]) and \
         cornersOk(Q, x0, x1, y0, y1, U0, U1, R, wx, wy, False, sl_sub(L, cSL(1))[0])
+
+
+def ancPL(x, q, fst):
+    return ([-q], [0], [x]) if fst else ([0], [-q], [x])
+
+
+def ancOk(Q, x0, x1, y0, y1, U0, U1, R, wx, wy, xa, ya, q):
+    co = lambda neg, P: cornersOk(Q, x0, x1, y0, y1, U0, U1, R, wx, wy, neg, P)
+    return (co(False, ancPL(xa, q, True)) and co(False, ancPL(ya, q, False))) or \
+        (co(True, ancPL(xa, q, True)) and co(True, ancPL(ya, q, False)))
+
+
+def xiPL(A, B):
+    return addPL(addPL(mulPL(pmul(Cp, sdenP(B)), A[0]), mulPL(pmul(Sp, sdenP(A)), B[0])),
+                 ([0], [0], psmul(-1, pmul(Np, pmul(sdenP(A), sdenP(B))))))
+
+
+def cornerOk(Q, x0, x1, y0, y1, U0, U1, R, wx, wy, Dn, r):
+    co = lambda neg, P: cornersOk(Q, x0, x1, y0, y1, U0, U1, R, wx, wy, neg, P)
+    ck = r[3]
+    if ck[0] == 'std': return True
+    _, xa, ya, ym, q = ck
+    if not (0 < q and r[1] is None and r[2] is None): return False
+    aL = sl_sub(capX(Dn, r[0][0]), sSL(1))
+    if ck[0] == 'c3':
+        return co(False, aL[0]) and co(True, sl_sub(aL, cSL(1))[0]) and \
+            co(True, sl_sub(capY(Dn, r[0][1]), cSL(1))[0]) and co(True, xiPL(aL, capY(Dn, r[0][1]))) and \
+            ancOk(Q, x0, x1, y0, y1, U0, U1, R, wx, wy, xa, ya, q)
+    return co(True, aL[0]) and co(True, sl_sub(capY(Dn, r[0][1]), cSL(1))[0]) and \
+        ancOk(Q, x0, x1, y0, y1, U0, U1, R, wx, wy, xa, ya, q)
 
 
 def tanOk(Q, x0, x1, y0, y1, U0, U1, R, wx, wy, Dn, r):

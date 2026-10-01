@@ -36,6 +36,8 @@ def svals(L, u, v):
 
 class Leaf:
     USE_TAN = True
+    USE_CORNER = True
+    ANCHOR = 'hi'
 
     def __init__(self, cover, S, R, x0, x1, y0, y1, U0, U1, maxdepth=8):
         side_, D, W, pts, segs, rects = cover
@@ -66,6 +68,7 @@ class Leaf:
         self.wx, self.wy = wall(x0), wall(y0)
         self.ok = self.wx is not None and self.wy is not None
         self.use_tan = Leaf.USE_TAN
+        self.use_corner = Leaf.USE_CORNER
         if self.ok:
             self.crs = [self.modes(r) for r in self.crs]
 
@@ -94,6 +97,17 @@ class Leaf:
                 if tanAx(Q, x0, x1, y0, y1, U0, U1, R, self.wx, self.wy, cap, cand):
                     mo = cand
             out.append(mo)
+        out.append(('std',))
+        if self.use_corner and out[1] is None and out[2] is None:
+            # E'': corner3, then xcut; McCormick anchor at the low corner (2x0, 2y0)/2Q, else the high one
+            ym = y0 + y1
+            anchors = [(2 * x0, 2 * y0), (2 * x1, 2 * y1)]
+            if Leaf.ANCHOR == 'lo': anchors.reverse()
+            for kind in ('c3', 'xc'):
+                for xa, ya in anchors:
+                    cand = tuple(out[:3]) + ((kind, xa, ya, ym, 2 * Q),)
+                    if cornerOk(Q, x0, x1, y0, y1, U0, U1, R, self.wx, self.wy, D, cand):
+                        return cand
         return tuple(out)
 
     def pins(self):
@@ -210,7 +224,8 @@ class Leaf:
                 for e, bx, l in zip(self.cvs, self.vbx, vc):
                     alts.append([t for x in l if tagOk(pat, x[1]) for t in segCAlts(Dp, X, Y, e[4], self.D, nat_sub(e[3], e[1]), vUps(self.D, e), vLos(self.D, e), bx, x[0])])
                 for r, (xs, ys) in zip(self.crs, lc):
-                    alts.append([lebRF(Dp, X, Y, self.D, r, ax, ay) for ax in xs if tagOk(pat, capTag(ax)) for ay in ys if tagOk(pat, capTag(ay))])
+                    alts.append([t for ax in xs if tagOk(pat, capTag(ax)) for ay in ys if tagOk(pat, capTag(ay))
+                                 for t in lebRFs(Dp, X, Y, self.D, r, ax, ay)])
                 sps = [sproc(Dp, X, Y, s_, b) for s_, b in zip(splits, pat)]
                 for comb in cprod(alts):
                     T = sumRF(Dp, comb + sps + [rf_const(-self.W, 1)])
@@ -332,8 +347,12 @@ def lmode(mo):
     return "none" if mo is None else f"some ({mo[0]}, {mo[1]})"
 
 
+def lck(ck):
+    return "CK.std" if ck[0] == 'std' else f"(CK.{ck[0]} {ck[1]} {ck[2]} {ck[3]} {ck[4]})"
+
+
 def lrm(rm):
-    return f"({ltup(rm[0])}, {lmode(rm[1])}, {lmode(rm[2])})"
+    return f"({ltup(rm[0])}, {lmode(rm[1])}, {lmode(rm[2])}, {lck(rm[3])})"
 
 
 def ltup(t):

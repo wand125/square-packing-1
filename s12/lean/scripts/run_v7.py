@@ -86,7 +86,7 @@ def work(args):
     idx, root, leaves, outdir = args
     global _cov
     if _cov is None:
-        _cov = read_cover(COVER)
+        _cov = sorted_cover()
     _, D, W, pts, segs, rects = _cov
     t0 = time.time()
     tree = build(root, leaves, F(7))
@@ -116,15 +116,32 @@ def work(args):
     return status
 
 
+def sorted_cover():
+    """The cover with its segments normalised (`segNorm`) and sorted by key (`STree.chainB`)."""
+    side, D, W, pts, segs, rects = read_cover(COVER)
+    segs = sorted(segs, key=lambda e: e[:4])
+    return side, D, W, pts, segs, rects
+
+
+def stree(segs):
+    if not segs:
+        return "STree.leaf"
+    m = len(segs) // 2
+    return f"(STree.node {stree(segs[:m])} {G.ltup(segs[m])} {stree(segs[m + 1:])})"
+
+
 def data_module(outdir):
-    cov = read_cover(COVER)
-    _, D, W, pts, segs, rects = cov
+    _, D, W, pts, segs, rects = sorted_cover()
     txt = "\n".join([
         "import Sqpack.ExTree",
-        "/-! The cover `L4_k02_box7.txt` (segments normalised `X0 < X1` or `Y0 < Y1`). -/",
+        "/-! The cover `L4_k02_box7.txt`: segments normalised (`segNorm`) and sorted by key, as a list",
+        "(`tsegs`, used by the leaves) and as a search tree (`segsT`); the Lebesgue square (`trects`). -/",
         "namespace SquarePacking.LemmaELeaf", "open ZMTreeM",
         f"def tsegs : List SegE := [{', '.join(G.ltup(e) for e in segs)}]",
         f"def trects : List RectE := [{', '.join(G.ltup(r) for r in rects)}]",
+        f"def segsT : STree := {stree(segs)}",
+        "set_option maxRecDepth 100000 in",
+        "theorem segsT_toList : segsT.toList = tsegs := by decide +kernel",
         "end SquarePacking.LemmaELeaf"]) + "\n"
     with open(os.path.join(outdir, "Data.lean"), 'w') as f:
         f.write(txt)
