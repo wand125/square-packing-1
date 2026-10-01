@@ -1,5 +1,5 @@
 import Sqpack.ChordE
-import Sqpack.LebE
+import Sqpack.LebTan
 import Sqpack.PolyMin
 import Sqpack.CovMP
 
@@ -296,22 +296,78 @@ noncomputable def vsegT (D : ℕ) (e : SegE) : SegT :=
   let A := (e.2.1 : ℝ) / D; let B := (e.2.2.2.1 : ℝ) / D; let ξ := (e.1 : ℝ) / D
   ((e.2.2.2.2 : ℝ) / (B - A), B - A, formsOf A B (vLX θ ξ) (vLY θ ξ) (vUX θ ξ) (vUY θ ξ))
 
-/-- The term of a rectangle entry: `d_x = X0/D − x_min`, `d_y = Y0/D − y_min`. -/
-noncomputable def rectT (D : ℕ) (r : RectE) : LebT :=
-  ((r.2.2.2.2 : ℝ), (-1, 0, (r.1 : ℝ) / D + (Real.cos θ + Real.sin θ) / 2),
-    (0, -1, (r.2.1 : ℝ) / D + (Real.cos θ + Real.sin θ) / 2))
+/-- A rectangle entry with the modes of its two caps (`none` = std, `some (n, m)` = `tan` at
+`d* = n/m`). -/
+abbrev RectM := RectE × Option (ℕ × ℕ) × Option (ℕ × ℕ)
+
+/-- The `tan` transform of a cap form `d` (`d* = n/m`): `d' = (k/s) d + c − k²/(2s) − k d*/s + s/2`,
+`k = s + c − d*`, so that `ĝ(d') ≥ (d' − s/2)/c = 1 − T_{d*}(d)` (`SqArea.one_sub_tanT`). -/
+noncomputable def tanF (n m : ℕ) (F : ℝ × ℝ × ℝ) : ℝ × ℝ × ℝ :=
+  let s := Real.sin θ; let co := Real.cos θ; let ds := (n : ℝ) / m; let k := s + co - ds
+  (k / s * F.1, k / s * F.2.1, k / s * F.2.2 + (co - k ^ 2 / (2 * s) - k * ds / s + s / 2))
+
+/-- The cap form in a mode: `none` = std (`ĝ(d)`), `some (n, m)` = `tan` at `d* = n/m`. -/
+noncomputable def capFm : Option (ℕ × ℕ) → (ℝ × ℝ × ℝ) → ℝ × ℝ × ℝ
+  | none, F => F
+  | some (n, m), F => tanF θ n m F
+
+/-- The condition of a mode at a depth `d`: none for std; `d* ≤ 1` and `d ≥ max(s, c)` for `tan`. -/
+def ModeOk : Option (ℕ × ℕ) → ℝ → Prop
+  | none, _ => True
+  | some (n, m), d => (n : ℝ) / m ≤ 1 ∧ max (Real.sin θ) (Real.cos θ) ≤ d
+
+/-- The term of a rectangle entry with its cap modes: `d_x = X0/D − x_min`, `d_y = Y0/D − y_min`,
+each possibly `tan`-transformed. -/
+noncomputable def rectT (D : ℕ) (r : RectM) : LebT :=
+  ((r.1.2.2.2.2 : ℝ), capFm θ r.2.1 (-1, 0, (r.1.1 : ℝ) / D + (Real.cos θ + Real.sin θ) / 2),
+    capFm θ r.2.2 (0, -1, (r.1.2.1 : ℝ) / D + (Real.cos θ + Real.sin θ) / 2))
 
 variable {θ}
+
+lemma aff_tanF (n m : ℕ) (F : ℝ × ℝ × ℝ) (c : ℝ × ℝ) :
+    aff (tanF θ n m F) c = (Real.sin θ + Real.cos θ - (n : ℝ) / m) / Real.sin θ * aff F c +
+      (Real.cos θ - (Real.sin θ + Real.cos θ - (n : ℝ) / m) ^ 2 / (2 * Real.sin θ) -
+        (Real.sin θ + Real.cos θ - (n : ℝ) / m) * ((n : ℝ) / m) / Real.sin θ + Real.sin θ / 2) := by
+  simp only [aff, tanF]; ring
+
+/-- The left cap is at most `ĝ` of its mode's form. -/
+lemma cap_le_mode (hs : 0 < Real.sin θ) (hc : 0 < Real.cos θ) {c : ℝ × ℝ} {a : ℝ}
+    (mo : Option (ℕ × ℕ)) {F : ℝ × ℝ × ℝ} (hF : aff F c = a - SqArea.xmin c θ)
+    (hm : ModeOk θ mo (a - SqArea.xmin c θ)) :
+    volume (sq c θ 1 ∩ {p | p.1 < a}) ≤
+      ENNReal.ofReal (SqArea.ghat (Real.sin θ) (Real.cos θ) (aff (capFm θ mo F) c)) := by
+  match mo, hm with
+  | none, _ => rw [capFm, hF]; exact SqArea.cap_le_ghat hs hc a
+  | some (n, m), ⟨h1, h2⟩ =>
+    refine (SqArea.cap_le_tan hs hc h1 h2).trans (ENNReal.ofReal_le_ofReal ?_)
+    rw [SqArea.one_sub_tanT hs hc, capFm, aff_tanF, hF]
+    exact SqArea.lin_le_ghat hs hc _
+
+/-- The bottom cap is at most `ĝ` of its mode's form. -/
+lemma bottom_cap_le_mode (hs : 0 < Real.sin θ) (hc : 0 < Real.cos θ) {c : ℝ × ℝ} {a : ℝ}
+    (mo : Option (ℕ × ℕ)) {F : ℝ × ℝ × ℝ} (hF : aff F c = a - SqArea.ymin c θ)
+    (hm : ModeOk θ mo (a - SqArea.ymin c θ)) :
+    volume (sq c θ 1 ∩ {p | p.2 < a}) ≤
+      ENNReal.ofReal (SqArea.ghat (Real.sin θ) (Real.cos θ) (aff (capFm θ mo F) c)) := by
+  match mo, hm with
+  | none, _ => rw [capFm, hF]; exact SqArea.bottom_cap_le_ghat hs hc a
+  | some (n, m), ⟨h1, h2⟩ =>
+    refine (SqArea.bottom_cap_le_tan hs hc h1 h2).trans (ENNReal.ofReal_le_ofReal ?_)
+    rw [SqArea.one_sub_tanT hs hc, capFm, aff_tanF, hF]
+    exact SqArea.lin_le_ghat hs hc _
 
 /-- **The bound is at most the segment and rectangle mass** at the pose (claimed horizontal
 segments `chs`, vertical `cvs`, rectangles `crs` whose square lies left of and below their far
 sides). -/
 theorem fE_le_mass {D : ℕ} (hD : 0 < D) (hs : 0 < Real.sin θ) (hc : 0 < Real.cos θ) (c : ℝ × ℝ)
-    {segs : List SegE} {rects : List RectE} {chs cvs : List SegE} {crs : List RectE}
+    {segs : List SegE} {rects : List RectE} {chs cvs : List SegE}
     (hnd : (chs ++ cvs).Nodup) (hch : ∀ e ∈ chs, e ∈ segs ∧ e.2.1 = e.2.2.2.1 ∧ e.1 < e.2.2.1)
-    (hcv : ∀ e ∈ cvs, e ∈ segs ∧ e.1 = e.2.2.1 ∧ e.2.1 < e.2.2.2.1) (hcr : crs.Nodup)
-    (hcrs : ∀ r ∈ crs, r ∈ rects ∧
-      ∀ p ∈ sq c θ 1, p.1 ≤ (r.2.2.1 : ℝ) / D ∧ p.2 ≤ (r.2.2.2.1 : ℝ) / D) :
+    (hcv : ∀ e ∈ cvs, e ∈ segs ∧ e.1 = e.2.2.1 ∧ e.2.1 < e.2.2.2.1) {crs : List RectM}
+    (hcr : (crs.map Prod.fst).Nodup)
+    (hcrs : ∀ r ∈ crs, r.1 ∈ rects ∧
+      (∀ p ∈ sq c θ 1, p.1 ≤ (r.1.2.2.1 : ℝ) / D ∧ p.2 ≤ (r.1.2.2.2.1 : ℝ) / D) ∧
+      ModeOk θ r.2.1 ((r.1.1 : ℝ) / D - SqArea.xmin c θ) ∧
+      ModeOk θ r.2.2 ((r.1.2.1 : ℝ) / D - SqArea.ymin c θ)) :
     fE (Real.sin θ) (Real.cos θ) (chs.map (hsegT θ D) ++ cvs.map (vsegT θ D))
         (crs.map (rectT θ D)) c ≤
       segMass D segs (sq c θ 1) + rectMass D rects (sq c θ 1) := by
@@ -375,20 +431,30 @@ theorem fE_le_mass {D : ℕ} (hD : 0 < D) (hs : 0 < Real.sin θ) (hc : 0 < Real.
   have Rc : ((crs.map (rectT θ D)).map fun l => l.1 * (1 - SqArea.ghat (Real.sin θ) (Real.cos θ)
       (aff l.2.1 c) - SqArea.ghat (Real.sin θ) (Real.cos θ) (aff l.2.2 c))).sum ≤
       rectMass D rects (sq c θ 1) := by
-    rw [List.map_map, rectMass, ← List.sum_toFinset _ hcr]
-    refine le_trans (Finset.sum_le_sum fun r hr => ?_)
-      (Finset.sum_le_sum_of_subset_of_nonneg (fun r hr => List.mem_toFinset.mpr
-        (hcrs r (List.mem_toFinset.mp hr)).1) fun _ _ _ =>
-          mul_nonneg (Nat.cast_nonneg _) ENNReal.toReal_nonneg)
-    have h := SqArea.area_ge_ghat (c := c) hs hc (a1 := (r.1 : ℝ) / D) (a2 := (r.2.1 : ℝ) / D)
-      (hcrs r (List.mem_toFinset.mp hr)).2
-    have ex : aff (rectT θ D r).2.1 c = (r.1 : ℝ) / D - SqArea.xmin c θ := by
-      simp only [aff, rectT, SqArea.xmin]; ring
-    have ey : aff (rectT θ D r).2.2 c = (r.2.1 : ℝ) / D - SqArea.ymin c θ := by
-      simp only [aff, rectT, SqArea.ymin]; ring
-    simp only [Function.comp, ex, ey]
-    rw [Set.inter_comm] at h ⊢
-    exact mul_le_mul_of_nonneg_left h (Nat.cast_nonneg _)
+    have hterm : ∀ r ∈ crs, (rectT θ D r).1 * (1 - SqArea.ghat (Real.sin θ) (Real.cos θ)
+        (aff (rectT θ D r).2.1 c) - SqArea.ghat (Real.sin θ) (Real.cos θ) (aff (rectT θ D r).2.2 c)) ≤
+        (r.1.2.2.2.2 : ℝ) * (volume (sq c θ 1 ∩ rectSet D r.1)).toReal := by
+      intro r hr
+      obtain ⟨_, hb, mx, my⟩ := hcrs r hr
+      have ex : aff ((-1, 0, (r.1.1 : ℝ) / D + (Real.cos θ + Real.sin θ) / 2) : ℝ × ℝ × ℝ) c =
+          (r.1.1 : ℝ) / D - SqArea.xmin c θ := by
+        simp only [aff, SqArea.xmin]; ring
+      have ey : aff ((0, -1, (r.1.2.1 : ℝ) / D + (Real.cos θ + Real.sin θ) / 2) : ℝ × ℝ × ℝ) c =
+          (r.1.2.1 : ℝ) / D - SqArea.ymin c θ := by
+        simp only [aff, SqArea.ymin]; ring
+      have h := SqArea.area_ge_caps (SqArea.ghat_nonneg hs hc) (SqArea.ghat_nonneg hs hc) hb
+        (cap_le_mode hs hc r.2.1 ex mx) (bottom_cap_le_mode hs hc r.2.2 ey my)
+      exact mul_le_mul_of_nonneg_left h (Nat.cast_nonneg _)
+    rw [List.map_map]
+    refine le_trans (List.sum_le_sum fun r hr => hterm r hr) ?_
+    have hmap : (crs.map fun r => (r.1.2.2.2.2 : ℝ) * (volume (sq c θ 1 ∩ rectSet D r.1)).toReal) =
+        (crs.map Prod.fst).map fun e => (e.2.2.2.2 : ℝ) * (volume (sq c θ 1 ∩ rectSet D e)).toReal := by
+      rw [List.map_map]; rfl
+    rw [hmap, rectMass, ← List.sum_toFinset _ hcr]
+    refine Finset.sum_le_sum_of_subset_of_nonneg (fun e he => ?_) fun _ _ _ =>
+      mul_nonneg (Nat.cast_nonneg _) ENNReal.toReal_nonneg
+    obtain ⟨r, hr, rfl⟩ := List.mem_map.mp (List.mem_toFinset.mp he)
+    exact List.mem_toFinset.mpr (hcrs r hr).1
   simp only [fE]
   linarith
 

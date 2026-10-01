@@ -171,6 +171,35 @@ def vUYs(Dn, X): return ((psmul(-1, tw(Dn, Sp)), tw(Dn, Cp), padd(psmul(2 * X, S
 def capX(Dn, X0): return ((psmul(-2 * Dn, Np), [0], padd(psmul(2 * X0, Np), psmul(Dn, padd(Cp, Sp)))), 0, 0, 1, 2 * Dn)
 def capY(Dn, Y0): return (([0], psmul(-2 * Dn, Np), padd(psmul(2 * Y0, Np), psmul(Dn, padd(Cp, Sp)))), 0, 0, 1, 2 * Dn)
 def sSL(h): return (([0], [0], Sp), 0, 0, 1, h)
+def cSL(h): return (([0], [0], Cp), 0, 0, 1, h)
+
+
+# tan-mode cap lines (LemmaEPoly.tanK / tanC / tanCap / capXm / capYm); a RectM is (rect, mx, my)
+def tanK(n, m): return padd(psmul(m, padd(Sp, Cp)), psmul(-n, Np))
+
+
+def tanC(Dn, n, m):
+    K = tanK(n, m)
+    return padd(padd(psmul(2 * Dn * m * m, pmul(Sp, Cp)), psmul(-Dn, pmul(K, K))),
+                padd(psmul(-(2 * Dn * n), pmul(Np, K)), psmul(Dn * m * m, pmul(Sp, Sp))))
+
+
+def tanCap(Dn, n, m, P):
+    mK = psmul(m, tanK(n, m))
+    return ((pmul(mK, P[0]), pmul(mK, P[1]), padd(pmul(mK, P[2]), tanC(Dn, n, m))), 0, 1, 1, 2 * Dn * m * m)
+
+
+def capXm(Dn, rm):
+    r, mx, _ = rm
+    return capX(Dn, r[0]) if mx is None else tanCap(Dn, mx[0], mx[1], capX(Dn, r[0])[0])
+
+
+def capYm(Dn, rm):
+    r, _, my = rm
+    return capY(Dn, r[1]) if my is None else tanCap(Dn, my[0], my[1], capY(Dn, r[1])[0])
+
+
+def modeP(mo): return mo is None or (0 < mo[1] and mo[0] <= mo[1])
 
 
 # ---------------------------------------------------------------- LemmaEVert
@@ -363,8 +392,8 @@ def capAU(D, X, Y, cap, a):
 
 
 def lebRF(D, X, Y, Dn, r, ax, ay):
-    return rf_mul(rf_const(r[4], 1), rf_add(D, rf_add(D, rf_const(1, 1), rf_neg(capAU(D, X, Y, capX(Dn, r[0]), ax))),
-                                          rf_neg(capAU(D, X, Y, capY(Dn, r[1]), ay))))
+    return rf_mul(rf_const(r[0][4], 1), rf_add(D, rf_add(D, rf_const(1, 1), rf_neg(capAU(D, X, Y, capXm(Dn, r), ax))),
+                                             rf_neg(capAU(D, X, Y, capYm(Dn, r), ay))))
 
 
 def vertOk(Dn, W, sigma, D, X, Y, b0, b1, R, chs, cvs, crs, hbx, vbx, c):
@@ -377,8 +406,8 @@ def vertOk(Dn, W, sigma, D, X, Y, b0, b1, R, chs, cvs, crs, hbx, vbx, c):
     for e, bx, l in zip(cvs, vbx, vc):
         if not all(segCOk(sigma, D, X, Y, b0, b1, R, vUps(Dn, e), vLos(Dn, e), bx, x[0]) for x in l): return False
     for r, (xs, ys) in zip(crs, lc):
-        if not all(capAOk(sigma, D, X, Y, b0, b1, R, splits, capX(Dn, r[0]), a) for a in xs): return False
-        if not all(capAOk(sigma, D, X, Y, b0, b1, R, splits, capY(Dn, r[1]), a) for a in ys): return False
+        if not all(capAOk(sigma, D, X, Y, b0, b1, R, splits, capXm(Dn, r), a) for a in xs): return False
+        if not all(capAOk(sigma, D, X, Y, b0, b1, R, splits, capYm(Dn, r), a) for a in ys): return False
     for pat in pats(len(splits)):
         if not all(any(tagOk(pat, x[1]) for x in l) for l in hc): return False
         if not all(any(tagOk(pat, x[1]) for x in l) for l in vc): return False
@@ -447,7 +476,20 @@ def vFormsSLs(Dn, e):
 
 
 def lebSLs(Dn, r):
-    return [capX(Dn, r[0]), sl_sub(capX(Dn, r[0]), sSL(1)), capY(Dn, r[1]), sl_sub(capY(Dn, r[1]), sSL(1))]
+    return [capXm(Dn, r), sl_sub(capXm(Dn, r), sSL(1)), capYm(Dn, r), sl_sub(capYm(Dn, r), sSL(1))]
+
+
+def tanAx(Q, x0, x1, y0, y1, U0, U1, R, wx, wy, L, mo):
+    if mo is None: return True
+    n, m = mo
+    return 0 < m and n <= m and \
+        cornersOk(Q, x0, x1, y0, y1, U0, U1, R, wx, wy, False, sl_sub(L, sSL(1))[0]) and \
+        cornersOk(Q, x0, x1, y0, y1, U0, U1, R, wx, wy, False, sl_sub(L, cSL(1))[0])
+
+
+def tanOk(Q, x0, x1, y0, y1, U0, U1, R, wx, wy, Dn, r):
+    return tanAx(Q, x0, x1, y0, y1, U0, U1, R, wx, wy, capX(Dn, r[0][0]), r[1]) and \
+        tanAx(Q, x0, x1, y0, y1, U0, U1, R, wx, wy, capY(Dn, r[0][1]), r[2])
 
 
 def widN(R, U0, U1): return nat_sub(R * R + 2 * U1 * R, U0 * U0)

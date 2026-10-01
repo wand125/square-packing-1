@@ -35,6 +35,8 @@ def svals(L, u, v):
 
 
 class Leaf:
+    USE_TAN = True
+
     def __init__(self, cover, S, R, x0, x1, y0, y1, U0, U1, maxdepth=8):
         side_, D, W, pts, segs, rects = cover
         self.D, self.W, self.S, self.R = D, W, S, R
@@ -63,6 +65,36 @@ class Leaf:
             return None
         self.wx, self.wy = wall(x0), wall(y0)
         self.ok = self.wx is not None and self.wy is not None
+        self.use_tan = Leaf.USE_TAN
+        if self.ok:
+            self.crs = [self.modes(r) for r in self.crs]
+
+    def modes(self, r):
+        """the cap modes of a rectangle (QUADRANT_EXACT.md 4.4, qx2_zm.Exact.u_regime): 'tan' at
+        d* = min(1, (dmin + dmax)/2) when d >= cos on the whole box, else std; re-checked by tanAx."""
+        D, Q, R = self.D, self.Q, self.R
+        x0, x1, y0, y1, U0, U1 = self.box
+        u0, u1 = Fr(U0, R), Fr(U1, R)
+        c0, s0 = (1 - u0 * u0) / (1 + u0 * u0), 2 * u0 / (1 + u0 * u0)
+        if u1 * u1 + 2 * u1 - 1 <= 0:
+            c1, s1 = (1 - u1 * u1) / (1 + u1 * u1), 2 * u1 / (1 + u1 * u1)
+            w1 = c1 + s1
+        else:
+            w1 = Fr(14143, 10000)
+        w0 = c0 + s0
+        out = [r]
+        for a, lo, hi, cap, w in ((Fr(r[0], D), Fr(x0, Q), Fr(x1, Q), capX(D, r[0]), self.wx),
+                                  (Fr(r[1], D), Fr(y0, Q), Fr(y1, Q), capY(D, r[1]), self.wy)):
+            mo = None
+            dmax = a - lo + w1 / 2
+            dmin = a - hi + w0 / 2
+            if self.use_tan and dmax > 0 and dmin >= c0:
+                ds = min(Fr(1), (dmin + dmax) / 2)
+                cand = (ds.numerator, ds.denominator)
+                if tanAx(Q, x0, x1, y0, y1, U0, U1, R, self.wx, self.wy, cap, cand):
+                    mo = cand
+            out.append(mo)
+        return tuple(out)
 
     def pins(self):
         D, Q, R = self.D, self.Q, self.R
@@ -102,11 +134,13 @@ class Leaf:
             dv = ev(Dp, u)
             pts.append((u, (ev(X, u) / dv, ev(Y, u) / dv)))
         splits, lc = [], []
+        m0 = lowdeg(Dp) if b0 == 0 else 0
+        sig = ev(Dp[m0:], (b0 + b1) / 2 / R) > 0
         def qsign(q):
             return [svals(q, u, v) >= 0 for u, v in pts]
         for r in self.crs:
             pair = []
-            for cap in (capX(self.D, r[0]), capY(self.D, r[1])):
+            for cap in (capXm(self.D, r), capYm(self.D, r)):
                 ds = [svals(cap, u, v) for u, v in pts]
                 ss = [2 * u / (1 + u * u) for u, _ in pts]
                 if all(d <= 0 for d in ds): pair.append([('zeroC',)])
@@ -132,6 +166,18 @@ class Leaf:
             if not any(posl): return [(('drop',), None)]
             ch = ('box',) if len(bx[0]) * len(bx[1]) == 1 or len(bx[0]) * len(bx[1]) <= len(Ua) * len(La) \
                 else ('alt', sorted(Ua), sorted(La))
+            if ch[0] == 'alt' and not segOkA(sig, Dp, X, Y, b0, b1, R, ups, los, ch[1], ch[2]):
+                # options crossing inside the sub-bin: widen by float closeness, else the box choice
+                ch = ('box',)
+                for wtol in (1e-6, 1e-3, 1e-2, 1e-1):
+                    Ub, Lb = set(Ua), set(La)
+                    for u, v in pts:
+                        uv = [svals(L, u, v) for L in ups]; lv = [svals(L, u, v) for L in los]
+                        Ub |= {i for i in range(3) if uv[i] <= min(uv) + wtol}
+                        Lb |= {i for i in range(3) if lv[i] >= max(lv) - wtol}
+                    if len(Ub) * len(Lb) >= len(bx[0]) * len(bx[1]): break
+                    if segOkA(sig, Dp, X, Y, b0, b1, R, ups, los, sorted(Ub), sorted(Lb)):
+                        ch = ('alt', sorted(Ub), sorted(Lb)); break
             if all(posl): return [(ch, None)]
             # mixed: tag by a split whose sign pattern matches
             for k, sp in enumerate(splits):
@@ -282,6 +328,14 @@ def lPL(P):
     return f"({lpoly(P[0])}, {lpoly(P[1])}, {lpoly(P[2])})"
 
 
+def lmode(mo):
+    return "none" if mo is None else f"some ({mo[0]}, {mo[1]})"
+
+
+def lrm(rm):
+    return f"({ltup(rm[0])}, {lmode(rm[1])}, {lmode(rm[2])})"
+
+
 def ltup(t):
     return "(" + ", ".join(str(x) for x in t) + ")"
 
@@ -345,7 +399,7 @@ def to_lean(lf, name):
             f"  wx := {'true' if lf.wx else 'false'}\n  wy := {'true' if lf.wy else 'false'}\n"
             f"  chs := [{', '.join(ltup(e) for e in lf.chs)}]\n"
             f"  cvs := [{', '.join(ltup(e) for e in lf.cvs)}]\n"
-            f"  crs := [{', '.join(ltup(r) for r in lf.crs)}]\n"
+            f"  crs := [{', '.join(lrm(r) for r in lf.crs)}]\n"
             f"  Ls := [{', '.join(lPL(P) for P in lf.Ls)}]\n"
             f"  hbx := [{', '.join(lbx(b) for b in lf.hbx)}]\n"
             f"  vbx := [{', '.join(lbx(b) for b in lf.vbx)}]\n"

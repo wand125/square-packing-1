@@ -70,7 +70,7 @@ structure SubBin where
 def sgn (σ : Bool) (p : Poly) : Poly := if σ then p else smul (-1) p
 
 /-- The test of one sub-bin of the pair `(P, Q)`. -/
-def subOk (D W R : ℕ) (side : List PL) (chs cvs : List SegE) (crs : List RectE)
+def subOk (D W R : ℕ) (side : List PL) (chs cvs : List SegE) (crs : List RectM)
     (hbx vbx : List (List ℕ × List ℕ)) (P Q : PL)
     (b0 : ℕ) (sb : SubBin) : Bool :=
   let Δ := detP P Q; let X := xP P Q; let Y := yP P Q
@@ -89,7 +89,7 @@ inductive PairCert where
   | par
   | bins (sbs : List SubBin)
 
-def binsOk (D W R : ℕ) (side : List PL) (chs cvs : List SegE) (crs : List RectE)
+def binsOk (D W R : ℕ) (side : List PL) (chs cvs : List SegE) (crs : List RectM)
     (hbx vbx : List (List ℕ × List ℕ)) (P Q : PL) :
     ℕ → ℕ → List SubBin → Bool
   | b0, U1, [] => b0 == U1
@@ -97,19 +97,19 @@ def binsOk (D W R : ℕ) (side : List PL) (chs cvs : List SegE) (crs : List Rect
     subOk D W R side chs cvs crs hbx vbx P Q b0 sb &&
       binsOk D W R side chs cvs crs hbx vbx P Q sb.b1 U1 sbs
 
-def pairOk (D W R U0 U1 : ℕ) (side : List PL) (chs cvs : List SegE) (crs : List RectE)
+def pairOk (D W R U0 U1 : ℕ) (side : List PL) (chs cvs : List SegE) (crs : List RectM)
     (hbx vbx : List (List ℕ × List ℕ)) (P Q : PL) :
     PairCert → Bool
   | .par => (detP P Q).all (· == 0)
   | .bins sbs => binsOk D W R side chs cvs crs hbx vbx P Q U0 U1 sbs
 
 /-- One row: the certificates of `P` with the later lines `Ps` in order. -/
-def rowOk (D W R U0 U1 : ℕ) (side : List PL) (chs cvs : List SegE) (crs : List RectE)
+def rowOk (D W R U0 U1 : ℕ) (side : List PL) (chs cvs : List SegE) (crs : List RectM)
     (hbx vbx : List (List ℕ × List ℕ)) (P : PL) (Ps : List PL) (cs : List PairCert) : Bool :=
   cs.length == Ps.length && (Ps.zip cs).all (fun q => pairOk D W R U0 U1 side chs cvs crs hbx vbx P q.1 q.2)
 
 /-- All pairs `i < j` of a list, the certificates of `L[i]` with the later lines in order. -/
-def allPairsOk (D W R U0 U1 : ℕ) (side : List PL) (chs cvs : List SegE) (crs : List RectE)
+def allPairsOk (D W R U0 U1 : ℕ) (side : List PL) (chs cvs : List SegE) (crs : List RectM)
     (hbx vbx : List (List ℕ × List ℕ)) :
     List PL → List (List PairCert) → Bool
   | [], _ => true
@@ -132,14 +132,14 @@ lemma all_drop_end {α : Type*} (p : α → Bool) (l : List α) (m : ℕ) (h : l
     (l.drop m).all p = true := by
   simp [List.drop_eq_nil_of_le h]
 
-lemma rowOk_of {D W R U0 U1 : ℕ} {side : List PL} {chs cvs : List SegE} {crs : List RectE}
+lemma rowOk_of {D W R U0 U1 : ℕ} {side : List PL} {chs cvs : List SegE} {crs : List RectM}
     {hbx vbx : List (List ℕ × List ℕ)} {P : PL} {Ps : List PL} {cs : List PairCert}
     (hl : cs.length = Ps.length)
     (h : ((Ps.zip cs).drop 0).all (fun q => pairOk D W R U0 U1 side chs cvs crs hbx vbx P q.1 q.2) = true) :
     rowOk D W R U0 U1 side chs cvs crs hbx vbx P Ps cs = true := by
   simpa [rowOk, hl] using h
 
-lemma allPairsOk_drop_step {D W R U0 U1 : ℕ} {side : List PL} {chs cvs : List SegE} {crs : List RectE}
+lemma allPairsOk_drop_step {D W R U0 U1 : ℕ} {side : List PL} {chs cvs : List SegE} {crs : List RectM}
     {hbx vbx : List (List ℕ × List ℕ)} (L : List PL) (C : List (List PairCert)) (i : ℕ) (d : PL)
     (hi : i < L.length) (hc : i < C.length)
     (h1 : rowOk D W R U0 U1 side chs cvs crs hbx vbx (L.getD i d) (L.drop (i + 1)) (C.getD i []) = true)
@@ -148,7 +148,7 @@ lemma allPairsOk_drop_step {D W R U0 U1 : ℕ} {side : List PL} {chs cvs : List 
   rw [List.drop_eq_getElem_cons hi, List.drop_eq_getElem_cons hc, allPairsOk, h2, Bool.and_true]
   rwa [List.getD_eq_getElem _ _ hi, List.getD_eq_getElem _ _ hc] at h1
 
-lemma allPairsOk_drop_end {D W R U0 U1 : ℕ} {side : List PL} {chs cvs : List SegE} {crs : List RectE}
+lemma allPairsOk_drop_end {D W R U0 U1 : ℕ} {side : List PL} {chs cvs : List SegE} {crs : List RectM}
     {hbx vbx : List (List ℕ × List ℕ)} (L : List PL) (C : List (List PairCert)) (m : ℕ) (h : L.length ≤ m) :
     allPairsOk D W R U0 U1 side chs cvs crs hbx vbx (L.drop m) C = true := by
   simp [List.drop_eq_nil_of_le h, allPairsOk]
@@ -162,12 +162,12 @@ structure Claims (D : ℕ) (chs cvs : List SegE) : Prop where
   hcv : ∀ e ∈ cvs, e.2.1 < e.2.2.2.1
 
 /-- The bound `fE` at `θ = 2 arctan u` for the claims. -/
-noncomputable def fEu (D : ℕ) (chs cvs : List SegE) (crs : List RectE) (u : ℝ) (p : ℝ × ℝ) : ℝ :=
+noncomputable def fEu (D : ℕ) (chs cvs : List SegE) (crs : List RectM) (u : ℝ) (p : ℝ × ℝ) : ℝ :=
   fE (Real.sin (2 * Real.arctan u)) (Real.cos (2 * Real.arctan u))
     (chs.map (hsegT (2 * Real.arctan u) D) ++ cvs.map (vsegT (2 * Real.arctan u) D))
     (crs.map (rectT (2 * Real.arctan u) D)) p
 
-lemma binsOk_find {D W R : ℕ} {side : List PL} {chs cvs : List SegE} {crs : List RectE}
+lemma binsOk_find {D W R : ℕ} {side : List PL} {chs cvs : List SegE} {crs : List RectM}
     {hbx vbx : List (List ℕ × List ℕ)} {P Q : PL}
     {u : ℝ} (hR : 0 < R) :
     ∀ (sbs : List SubBin) (b0 U1 : ℕ), binsOk D W R side chs cvs crs hbx vbx P Q b0 U1 sbs = true →
@@ -185,9 +185,10 @@ lemma binsOk_find {D W R : ℕ} {side : List PL} {chs cvs : List SegE} {crs : Li
 
 /-- **One pair**: if two lines of a certified pair meet at a point of the region, the bound holds
 there. -/
-theorem pair_sound {D W R U0 U1 : ℕ} {side : List PL} {chs cvs : List SegE} {crs : List RectE}
+theorem pair_sound {D W R U0 U1 : ℕ} {side : List PL} {chs cvs : List SegE} {crs : List RectM}
     {hbx vbx : List (List ℕ × List ℕ)}
-    (hcl : Claims D chs cvs) (hR : 0 < R) {P Q : PL} {cert : PairCert}
+    (hcl : Claims D chs cvs) (hmd : ∀ r ∈ crs, modeP r.2.1 = true ∧ modeP r.2.2 = true) (hR : 0 < R)
+    {P Q : PL} {cert : PairCert}
     (hok : pairOk D W R U0 U1 side chs cvs crs hbx vbx P Q cert = true) {u : ℝ} (hu0 : (U0 : ℝ) / R < u)
     (hu1 : u ≤ (U1 : ℝ) / R) (hpos : 0 < u) (hlt : u < 1) {v : ℝ × ℝ}
     (hdet : eval (detP P Q) u ≠ 0) (h1 : aff (evalPL P u) v = 0) (h2 : aff (evalPL Q u) v = 0)
@@ -251,10 +252,10 @@ theorem pair_sound {D W R U0 U1 : ℕ} {side : List PL} {chs cvs : List SegE} {c
     · rw [hsbk] at hk
       rw [hv']
       simp only [Bool.and_eq_true, List.all_eq_true, bne_iff_ne, ne_eq] at hk
-      exact vertOk_sound hcl.hD ctx hcl.hch hcl.hcv (by rw [← hv']; exact hbd v hv) hk.1 hk.2
+      exact vertOk_sound hcl.hD ctx hcl.hch hcl.hcv (by rw [← hv']; exact hbd v hv) hk.1 hmd hk.2
 
 /-- **All pairs**: every pair `i < j` of the list has a passing certificate. -/
-lemma allPairs_sound {D W R U0 U1 : ℕ} {side : List PL} {chs cvs : List SegE} {crs : List RectE}
+lemma allPairs_sound {D W R U0 U1 : ℕ} {side : List PL} {chs cvs : List SegE} {crs : List RectM}
     {hbx vbx : List (List ℕ × List ℕ)} :
     ∀ (L : List PL) (css : List (List PairCert)), allPairsOk D W R U0 U1 side chs cvs crs hbx vbx L css = true →
       ∀ (i j : ℕ) (hi : i < j) (hj : j < L.length),
@@ -544,7 +545,7 @@ structure ExLeaf where
   wy : Bool
   chs : List SegE
   cvs : List SegE
-  crs : List RectE
+  crs : List RectM
   Ls : List PL
   hbx : List (List ℕ × List ℕ)
   vbx : List (List ℕ × List ℕ)
@@ -554,23 +555,70 @@ def hFormsSLs (D : ℕ) (e : SegE) : List SL :=
   formsSL (SL.cst e.1 D) (SL.cst e.2.2.1 D) (hTA D e.2.1) (hTB D e.2.1) (hTC D e.2.1) (hTD D e.2.1)
 def vFormsSLs (D : ℕ) (e : SegE) : List SL :=
   formsSL (SL.cst e.2.1 D) (SL.cst e.2.2.2.1 D) (vLXs D e.1) (vLYs D e.1) (vUXs D e.1) (vUYs D e.1)
-def lebSLs (D : ℕ) (r : RectE) : List SL :=
-  [capX D r.1, (capX D r.1).sub (sSL 1), capY D r.2.1, (capY D r.2.1).sub (sSL 1)]
+def lebSLs (D : ℕ) (r : RectM) : List SL :=
+  [capXm D r, (capXm D r).sub (sSL 1), capYm D r, (capYm D r).sub (sSL 1)]
+
+/-- `cos θ / h`. -/
+def cSL (h : ℕ) : SL := ⟨([0], [0], Cp), 0, 0, 1, h⟩
+
+lemma val_cSL {h : ℕ} (hh : h ≠ 0) (u : ℝ) (c : ℝ × ℝ) :
+    (cSL h).val u c = (1 - u ^ 2) / (1 + u ^ 2) / h := by
+  simp only [SL.val, sden, cSL, aff, evalPL, eval_Cp, eval_cons, eval_nil]
+  simp [div_div]
+
+/-- The `tan` regime of one cap is certified on the region: `d* = n/m ≤ 1` and `d ≥ s`, `d ≥ c`
+at its four corners (`d` affine in the centre). -/
+def tanAx (Q x0 x1 y0 y1 U0 U1 R : ℕ) (wx wy : Bool) (L : SL) : Option (ℕ × ℕ) → Bool
+  | none => true
+  | some (n, m) => Nat.blt 0 m && Nat.ble n m &&
+      cornersOk Q x0 x1 y0 y1 U0 U1 R wx wy false (L.sub (sSL 1)).P &&
+      cornersOk Q x0 x1 y0 y1 U0 U1 R wx wy false (L.sub (cSL 1)).P
+
+def tanOk (Q x0 x1 y0 y1 U0 U1 R : ℕ) (wx wy : Bool) (D : ℕ) (r : RectM) : Bool :=
+  tanAx Q x0 x1 y0 y1 U0 U1 R wx wy (capX D r.1.1) r.2.1 &&
+    tanAx Q x0 x1 y0 y1 U0 U1 R wx wy (capY D r.1.2.1) r.2.2
+
+lemma tanAx_sound {Q x0 x1 y0 y1 U0 U1 R : ℕ} (hQ : 0 < Q) (hR : 0 < R) {wx wy : Bool} {L : SL}
+    (hL : L.d ≠ 0) {mo : Option (ℕ × ℕ)} (h : tanAx Q x0 x1 y0 y1 U0 U1 R wx wy L mo = true) {u : ℝ}
+    (hu0 : 0 < u) (hu1 : u < 1) (hb0 : (U0 : ℝ) / R ≤ u) (hb1 : u ≤ (U1 : ℝ) / R) :
+    modeP mo = true ∧ ∀ p ∈ poly ((sideL Q x0 x1 y0 y1 wx wy).map (evalPL · u)),
+      ModeOk (2 * Real.arctan u) mo (L.val u p) := by
+  match mo, h with
+  | none, _ => exact ⟨rfl, fun _ _ => trivial⟩
+  | some (n, m), h =>
+    simp only [tanAx, Bool.and_eq_true, Nat.blt_eq, Nat.ble_eq] at h
+    obtain ⟨⟨⟨hm, hnm⟩, c1⟩, c2⟩ := h
+    refine ⟨by simp [modeP, hm, hnm], fun p hp => ⟨?_, ?_⟩⟩
+    · rw [div_le_one (by exact_mod_cast hm)]; exact_mod_cast hnm
+    · have ds : (sSL 1).d ≠ 0 := by simp [sSL]
+      have dc : (cSL 1).d ≠ 0 := by simp [cSL]
+      have k1 := corners_sound hQ hR c1 hu0 hu1 hb0 hb1 p hp
+      have k2 := corners_sound hQ hR c2 hu0 hu1 hb0 hb1 p hp
+      try simp only [if_false, Bool.false_eq_true] at k1 k2
+      have v1 : 0 ≤ (L.sub (sSL 1)).val u p :=
+        div_nonneg k1 (sden_pos _ (Nat.mul_ne_zero hL ds) hu0 hu1).le
+      have v2 : 0 ≤ (L.sub (cSL 1)).val u p :=
+        div_nonneg k2 (sden_pos _ (Nat.mul_ne_zero hL dc) hu0 hu1).le
+      rw [val_sub _ _ hL ds hu0 hu1, val_sSL one_ne_zero] at v1
+      rw [val_sub _ _ hL dc hu0 hu1, val_cSL one_ne_zero] at v2
+      rw [(trig u).1, (trig u).2, max_le_iff]
+      try norm_num at v1 v2
+      constructor <;> linarith
 
 /-- **The `EXACT` leaf test.** -/
 def exOk (D S R W x0 x1 y0 y1 U0 U1 : ℕ) (segs : List SegE) (rects : List RectE) (lf : ExLeaf) :
     Bool :=
   let side := sideL (D * S) x0 x1 y0 y1 lf.wx lf.wy
   let pin := pinOk (D * S) x0 x1 y0 y1 U0 U1 R lf.wx lf.wy lf.Ls
-  Nat.blt U1 R && Nat.ble U0 U1 && decide (lf.chs ++ lf.cvs).Nodup && decide lf.crs.Nodup &&
+  Nat.blt U1 R && Nat.ble U0 U1 && decide (lf.chs ++ lf.cvs).Nodup && decide (lf.crs.map Prod.fst).Nodup &&
     lf.chs.all (fun e => segs.contains e && e.2.1 == e.2.2.2.1 && Nat.blt e.1 e.2.2.1 &&
       (hFormsSLs D e).all pin) &&
     lf.cvs.all (fun e => segs.contains e && e.1 == e.2.2.1 && Nat.blt e.2.1 e.2.2.2.1 &&
       (vFormsSLs D e).all pin) &&
-    lf.crs.all (fun r => rects.contains r &&
-      Nat.ble (2 * x1 * widD R U0 + D * S * widN R U0 U1) (2 * r.2.2.1 * S * widD R U0) &&
-      Nat.ble (2 * y1 * widD R U0 + D * S * widN R U0 U1) (2 * r.2.2.2.1 * S * widD R U0) &&
-      (lebSLs D r).all pin) &&
+    lf.crs.all (fun r => rects.contains r.1 &&
+      Nat.ble (2 * x1 * widD R U0 + D * S * widN R U0 U1) (2 * r.1.2.2.1 * S * widD R U0) &&
+      Nat.ble (2 * y1 * widD R U0 + D * S * widN R U0 U1) (2 * r.1.2.2.2.1 * S * widD R U0) &&
+      (lebSLs D r).all pin && tanOk (D * S) x0 x1 y0 y1 U0 U1 R lf.wx lf.wy D r) &&
     lf.hbx.length == lf.chs.length && lf.vbx.length == lf.cvs.length &&
     (lf.chs.zip lf.hbx).all (fun q => boxDomOk (D * S) x0 x1 y0 y1 U0 U1 R lf.wx lf.wy
       (hUps D q.1) (hLos D q.1) q.2) &&
@@ -583,15 +631,15 @@ def exHead (D S R W x0 x1 y0 y1 U0 U1 : ℕ) (segs : List SegE) (rects : List Re
     Bool :=
   let side := sideL (D * S) x0 x1 y0 y1 lf.wx lf.wy
   let pin := pinOk (D * S) x0 x1 y0 y1 U0 U1 R lf.wx lf.wy lf.Ls
-  Nat.blt U1 R && Nat.ble U0 U1 && decide (lf.chs ++ lf.cvs).Nodup && decide lf.crs.Nodup &&
+  Nat.blt U1 R && Nat.ble U0 U1 && decide (lf.chs ++ lf.cvs).Nodup && decide (lf.crs.map Prod.fst).Nodup &&
     lf.chs.all (fun e => segs.contains e && e.2.1 == e.2.2.2.1 && Nat.blt e.1 e.2.2.1 &&
       (hFormsSLs D e).all pin) &&
     lf.cvs.all (fun e => segs.contains e && e.1 == e.2.2.1 && Nat.blt e.2.1 e.2.2.2.1 &&
       (vFormsSLs D e).all pin) &&
-    lf.crs.all (fun r => rects.contains r &&
-      Nat.ble (2 * x1 * widD R U0 + D * S * widN R U0 U1) (2 * r.2.2.1 * S * widD R U0) &&
-      Nat.ble (2 * y1 * widD R U0 + D * S * widN R U0 U1) (2 * r.2.2.2.1 * S * widD R U0) &&
-      (lebSLs D r).all pin) &&
+    lf.crs.all (fun r => rects.contains r.1 &&
+      Nat.ble (2 * x1 * widD R U0 + D * S * widN R U0 U1) (2 * r.1.2.2.1 * S * widD R U0) &&
+      Nat.ble (2 * y1 * widD R U0 + D * S * widN R U0 U1) (2 * r.1.2.2.2.1 * S * widD R U0) &&
+      (lebSLs D r).all pin && tanOk (D * S) x0 x1 y0 y1 U0 U1 R lf.wx lf.wy D r) &&
     lf.hbx.length == lf.chs.length && lf.vbx.length == lf.cvs.length &&
     (lf.chs.zip lf.hbx).all (fun q => boxDomOk (D * S) x0 x1 y0 y1 U0 U1 R lf.wx lf.wy
       (hUps D q.1) (hLos D q.1) q.2) &&
@@ -633,26 +681,15 @@ theorem CovMPo.of_exact {D S Mq R W x0 x1 y0 y1 U0 U1 : ℕ} {pts : List (ℕ ×
     have := (div_lt_one hRr).mpr this
     linarith
   have hb0 : (U0 : ℝ) / R ≤ u := hu0.le
+  have hmd : ∀ r ∈ lf.crs, modeP r.2.1 = true ∧ modeP r.2.2 = true := fun r hr => by
+    have htan := (hcrs r hr).2
+    simp only [tanOk, Bool.and_eq_true] at htan
+    exact ⟨(tanAx_sound hQ hR (L := capX D r.1.1) (by simp [capX]; omega) htan.1 hpos hlt hb0 hu1).1,
+      (tanAx_sound hQ hR (L := capY D r.1.2.1) (by simp [capY]; omega) htan.2 hpos hlt hb0 hu1).1⟩
   set θ := 2 * Real.arctan u with hθ
   have hs : 0 < Real.sin θ := by rw [hθ, (trig u).1]; positivity
   have hc : 0 < Real.cos θ := by
     rw [hθ, (trig u).2]; apply div_pos _ (by positivity); nlinarith
-  -- 1. the mass is at least `fE` at the centre
-  have hwid : wid θ / 2 ≤ (widN R U0 U1 : ℝ) / widD R U0 / 2 := by
-    have := wid_le_widHat hR (Nat.le_of_lt hU1) hb0 hu1; linarith
-  have hwd : 0 < widD R U0 := by unfold widD; have : 0 < R * R := Nat.mul_pos hR hR; omega
-  have hmass := fE_le_mass hD hs hc c hnd
-    (fun e he => ⟨(hch e he).1.1.1, (hch e he).1.1.2, (hch e he).1.2⟩)
-    (fun e he => ⟨(hcv e he).1.1.1, (hcv e he).1.1.2, (hcv e he).1.2⟩) hcr
-    (fun r hr => by
-      obtain ⟨⟨⟨hm, h1⟩, h2⟩, _⟩ := hcrs r hr
-      refine ⟨hm, fun p hp => ?_⟩
-      obtain ⟨a1, a2⟩ := abs_sub_le_wid hp
-      rw [abs_le] at a1 a2
-      have k1 := add_half_le hD hS hwd h1
-      have k2 := add_half_le hD hS hwd h2
-      push_cast at hx1 hy1
-      constructor <;> linarith)
   -- 2. the centre is in the region
   have hadm := (sq_subset_box_iff _ c θ).mp hbox
   have hwθ : wid θ = (1 - u ^ 2 + 2 * u) / (1 + u ^ 2) := by
@@ -688,6 +725,29 @@ theorem CovMPo.of_exact {D S Mq R W x0 x1 y0 y1 U0 U1 : ℕ} {pts : List (ℕ ×
     · simp only [evalPL, eval_cons, eval_nil]; push_cast
       rw [le_div_iff₀ (by push_cast at hQr; exact hQr)] at hy1
       push_cast at hy1; nlinarith
+  -- 1. the mass is at least `fE` at the centre
+  have hwid : wid θ / 2 ≤ (widN R U0 U1 : ℝ) / widD R U0 / 2 := by
+    have := wid_le_widHat hR (Nat.le_of_lt hU1) hb0 hu1; linarith
+  have hwd : 0 < widD R U0 := by unfold widD; have : 0 < R * R := Nat.mul_pos hR hR; omega
+  have hmass := fE_le_mass hD hs hc c hnd
+    (fun e he => ⟨(hch e he).1.1.1, (hch e he).1.1.2, (hch e he).1.2⟩)
+    (fun e he => ⟨(hcv e he).1.1.1, (hcv e he).1.1.2, (hcv e he).1.2⟩) hcr
+    (fun r hr => by
+      obtain ⟨⟨⟨⟨hm, h1⟩, h2⟩, _⟩, htan⟩ := hcrs r hr
+      simp only [tanOk, Bool.and_eq_true] at htan
+      have tx := (tanAx_sound hQ hR (L := capX D r.1.1) (by simp [capX]; omega) htan.1 hpos hlt hb0 hu1).2 c hcreg
+      have ty := (tanAx_sound hQ hR (L := capY D r.1.2.1) (by simp [capY]; omega) htan.2 hpos hlt hb0 hu1).2 c hcreg
+      rw [val_capX hD hpos hlt] at tx
+      rw [val_capY hD hpos hlt] at ty
+      refine ⟨hm, fun p hp => ?_, ?_, ?_⟩
+      · obtain ⟨a1, a2⟩ := abs_sub_le_wid hp
+        rw [abs_le] at a1 a2
+        have k1 := add_half_le hD hS hwd h1
+        have k2 := add_half_le hD hS hwd h2
+        push_cast at hx1 hy1
+        constructor <;> linarith
+      · convert tx using 1; simp only [SqArea.xmin]; ring
+      · convert ty using 1; simp only [SqArea.ymin]; ring)
   -- 3. every form is pinned
   have hfix : Fixed (poly ((sideL (D * S) x0 x1 y0 y1 lf.wx lf.wy).map (evalPL · u)))
       (Real.sin θ) (lf.Ls.map (evalPL · u))
@@ -718,20 +778,21 @@ theorem CovMPo.of_exact {D S Mq R W x0 x1 y0 y1 U0 U1 : ℕ} {pts : List (ℕ ×
           (fun c => (val_vLX hD hpos hlt _ c).symm) (fun c => (val_vLY hD hpos hlt _ c).symm)
           (fun c => (val_vUX hD hpos hlt _ c).symm) (fun c => (val_vUY hD hpos hlt _ c).symm)
     · obtain ⟨r, hr, rfl⟩ := List.mem_map.mp hl
-      obtain ⟨_, hpin⟩ := hcrs r hr
+      obtain ⟨⟨_, hpin⟩, htan⟩ := hcrs r hr
       have hp := hpin
-      have dX : (capX D r.1).d ≠ 0 := by simp [capX]; omega
-      have dY : (capY D r.2.1).d ≠ 0 := by simp [capY]; omega
+      have hm := hmd r hr
+      have dX : (capXm D r).d ≠ 0 := capXm_d hD r hm.1
+      have dY : (capYm D r).d ≠ 0 := capYm_d hD r hm.2
       have ds : (sSL 1).d ≠ 0 := by simp [sSL]
-      have ex : ∀ c, aff (rectT θ D r).2.1 c = (capX D r.1).val u c := fun c => by
-        rw [val_capX hD hpos hlt]; simp only [aff, rectT]; ring
-      have ey : ∀ c, aff (rectT θ D r).2.2 c = (capY D r.2.1).val u c := fun c => by
-        rw [val_capY hD hpos hlt]; simp only [aff, rectT]; ring
+      have ex : ∀ c, aff (rectT θ D r).2.1 c = (capXm D r).val u c := fun c =>
+        (val_capXm hD hpos hlt r hm.1 c).symm
+      have ey : ∀ c, aff (rectT θ D r).2.2 c = (capYm D r).val u c := fun c =>
+        (val_capYm hD hpos hlt r hm.2 c).symm
       have hsθ : Real.sin θ = 2 * u / (1 + u ^ 2) := by rw [hθ, (trig u).1]
-      refine ⟨Nat.cast_nonneg _, pin_sound hQ hR (hp (capX D r.1) (by simp [lebSLs])) dX hpos hlt hb0 hu1 ex,
-        pin_sound hQ hR (hp ((capX D r.1).sub (sSL 1)) (by simp [lebSLs])) (Nat.mul_ne_zero dX ds) hpos hlt hb0 hu1 ?_,
-        pin_sound hQ hR (hp (capY D r.2.1) (by simp [lebSLs])) dY hpos hlt hb0 hu1 ey,
-        pin_sound hQ hR (hp ((capY D r.2.1).sub (sSL 1)) (by simp [lebSLs])) (Nat.mul_ne_zero dY ds) hpos hlt hb0 hu1 ?_⟩
+      refine ⟨Nat.cast_nonneg _, pin_sound hQ hR (hp (capXm D r) (by simp [lebSLs])) dX hpos hlt hb0 hu1 ex,
+        pin_sound hQ hR (hp ((capXm D r).sub (sSL 1)) (by simp [lebSLs])) (Nat.mul_ne_zero dX ds) hpos hlt hb0 hu1 ?_,
+        pin_sound hQ hR (hp (capYm D r) (by simp [lebSLs])) dY hpos hlt hb0 hu1 ey,
+        pin_sound hQ hR (hp ((capYm D r).sub (sSL 1)) (by simp [lebSLs])) (Nat.mul_ne_zero dY ds) hpos hlt hb0 hu1 ?_⟩
       · intro c; rw [aff_subF, aff_constF, val_sub _ _ dX ds hpos hlt, val_sSL one_ne_zero, ex, hsθ]
         simp
       · intro c; rw [aff_subF, aff_constF, val_sub _ _ dY ds hpos hlt, val_sSL one_ne_zero, ey, hsθ]
@@ -763,14 +824,14 @@ theorem CovMPo.of_exact {D S Mq R W x0 x1 y0 y1 U0 U1 : ℕ} {pts : List (ℕ ×
     rcases lt_trichotomy i j with hij | hij | hij
     · obtain ⟨cert, hc'⟩ := allPairs_sound _ _ hpairs i j hij hj
       rw [hiA, hjB] at hc'
-      exact pair_sound hcl hR hc' hu0 hu1 hpos hlt hdetAB ht1 ht2 hv hbd
+      exact pair_sound hcl hmd hR hc' hu0 hu1 hpos hlt hdetAB ht1 ht2 hv hbd
     · subst hij
       exfalso; apply hdetAB
       have : A = B := hiA.symm.trans hjB
       rw [this, eval_detP]; ring
     · obtain ⟨cert, hc'⟩ := allPairs_sound _ _ hpairs j i hij hi
       rw [hiA, hjB] at hc'
-      refine pair_sound hcl hR hc' hu0 hu1 hpos hlt ?_ ht2 ht1 hv hbd
+      refine pair_sound hcl hmd hR hc' hu0 hu1 hpos hlt ?_ ht2 ht1 hv hbd
       rw [detP_swap]; exact neg_ne_zero.mpr hdetAB
   -- 5. assemble
   have h1 : fEu D lf.chs lf.cvs lf.crs u v ≤ fEu D lf.chs lf.cvs lf.crs u c := hle

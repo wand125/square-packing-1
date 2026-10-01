@@ -488,54 +488,6 @@ theorem capAlts_sound {σ : Bool} {Δ X Y : Poly} {b0 b1 R : ℕ} {u δ : ℝ}
       push_cast
       nlinarith
 
-/-- The certified value of a rectangle's term `ρ (1 − U_x − U_y)`. -/
-def lebVal (Δ X Y : Poly) (D : ℕ) (r : RectE) (mx my : ℕ) : RF :=
-  RF.mul (RF.const r.2.2.2.2 1) (RF.add Δ (RF.add Δ (RF.const 1 1)
-    (RF.neg (ghU Δ X Y (capX D r.1) mx))) (RF.neg (ghU Δ X Y (capY D r.2.1) my)))
-
-lemma lebVal_d (Δ X Y : Poly) {D : ℕ} (hD : 0 < D) (r : RectE) (mx my : ℕ) :
-    (lebVal Δ X Y D r mx my).d ≠ 0 := by
-  have a := ghU_d Δ X Y (capX D r.1) (by simp [capX]; omega) mx
-  have b := ghU_d Δ X Y (capY D r.2.1) (by simp [capY]; omega) my
-  simp only [lebVal]
-  refine Nat.mul_ne_zero one_ne_zero (RF.add_d Δ (RF.add_d Δ (by simp [RF.const]) ?_) ?_)
-  · simpa [RF.neg] using a
-  · simpa [RF.neg] using b
-
-/-- **A rectangle's term** is at least its certified value. -/
-theorem leb_ge {D : ℕ} (hD : 0 < D) {σ : Bool} {Δ X Y : Poly} {b0 b1 R : ℕ} {u δ : ℝ}
-    (h : VCtx Δ X Y σ b0 b1 R u δ) (r : RectE) {mx my : ℕ}
-    (hx : ghOk σ Δ X Y b0 b1 R (capX D r.1) mx = true)
-    (hy : ghOk σ Δ X Y b0 b1 R (capY D r.2.1) my = true) :
-    (lebVal Δ X Y D r mx my).eval δ u ≤
-      (rectT (2 * Real.arctan u) D r).1 *
-        (1 - SqArea.ghat (Real.sin (2 * Real.arctan u)) (Real.cos (2 * Real.arctan u))
-          (aff (rectT (2 * Real.arctan u) D r).2.1 (vtx X Y δ u)) -
-          SqArea.ghat (Real.sin (2 * Real.arctan u)) (Real.cos (2 * Real.arctan u))
-          (aff (rectT (2 * Real.arctan u) D r).2.2 (vtx X Y δ u))) := by
-  have hcx : (capX D r.1).d ≠ 0 := by simp [capX]; omega
-  have hcy : (capY D r.2.1).d ≠ 0 := by simp [capY]; omega
-  have gx := ghU_sound h hcx hx
-  have gy := ghU_sound h hcy hy
-  have ex : aff (rectT (2 * Real.arctan u) D r).2.1 (vtx X Y δ u) = (capX D r.1).val u (vtx X Y δ u) := by
-    rw [val_capX hD h.hu0 h.hu1]; simp only [aff, rectT]; ring
-  have ey : aff (rectT (2 * Real.arctan u) D r).2.2 (vtx X Y δ u) = (capY D r.2.1).val u (vtx X Y δ u) := by
-    rw [val_capY hD h.hu0 h.hu1]; simp only [aff, rectT]; ring
-  rw [ex, ey]
-  have dx := ghU_d Δ X Y (capX D r.1) hcx mx
-  have dy := ghU_d Δ X Y (capY D r.2.1) hcy my
-  have d1 : (RF.const 1 1).d ≠ 0 := by simp [RF.const]
-  have d2 : (RF.neg (ghU Δ X Y (capX D r.1) mx)).d ≠ 0 := by simpa [RF.neg] using dx
-  have d3 : (RF.neg (ghU Δ X Y (capY D r.2.1) my)).d ≠ 0 := by simpa [RF.neg] using dy
-  have d12 : (RF.add Δ (RF.const 1 1) (RF.neg (ghU Δ X Y (capX D r.1) mx))).d ≠ 0 :=
-    RF.add_d Δ d1 d2
-  have d123 : (RF.add Δ (RF.add Δ (RF.const 1 1) (RF.neg (ghU Δ X Y (capX D r.1) mx)))
-      (RF.neg (ghU Δ X Y (capY D r.2.1) my))).d ≠ 0 := RF.add_d Δ d12 d3
-  rw [lebVal, eval_mul h.ok (by simp [RF.const]) d123, eval_add h.ok h.hΔ d12 d3,
-    eval_add h.ok h.hΔ d1 d2, eval_neg, eval_neg, eval_const, eval_const]
-  simp only [rectT, Int.cast_one, Nat.cast_one, div_one, Int.cast_natCast]
-  exact mul_le_mul_of_nonneg_left (by linarith) (Nat.cast_nonneg _)
-
 /-! ## 4.  The whole bound at a vertex -/
 
 def sumRF (Δ : Poly) : List RF → RF
@@ -851,9 +803,9 @@ def capAU (Δ X Y : Poly) (cap : SL) : CapA → RF
   | .linT _ => ghU Δ X Y cap 2
 
 /-- The rectangle term `ρ (1 − U_x − U_y)` for two cap alternatives. -/
-def lebRF (Δ X Y : Poly) (D : ℕ) (r : RectE) (ax ay : CapA) : RF :=
-  RF.mul (RF.const r.2.2.2.2 1) (RF.add Δ (RF.add Δ (RF.const 1 1)
-    (RF.neg (capAU Δ X Y (capX D r.1) ax))) (RF.neg (capAU Δ X Y (capY D r.2.1) ay)))
+def lebRF (Δ X Y : Poly) (D : ℕ) (r : RectM) (ax ay : CapA) : RF :=
+  RF.mul (RF.const r.1.2.2.2.2 1) (RF.add Δ (RF.add Δ (RF.const 1 1)
+    (RF.neg (capAU Δ X Y (capXm D r) ax))) (RF.neg (capAU Δ X Y (capYm D r) ay)))
 
 /-! ### Common-factor certificates (`qx2_zm._gcdcert`) -/
 
@@ -1010,7 +962,7 @@ def vAltsP (Δ X Y : Poly) (D : ℕ) (pat : List Bool) (q : (SegE × (List ℕ �
     List RF :=
   (q.2.filter fun x => tagOk pat x.2).flatMap fun x =>
     segCAlts Δ X Y q.1.1.2.2.2.2 D (q.1.1.2.2.2.1 - q.1.1.2.1) (vUps D q.1.1) (vLos D q.1.1) q.1.2 x.1
-def lAltsP (Δ X Y : Poly) (D : ℕ) (pat : List Bool) (p : RectE × (List CapA × List CapA)) : List RF :=
+def lAltsP (Δ X Y : Poly) (D : ℕ) (pat : List Bool) (p : RectM × (List CapA × List CapA)) : List RF :=
   (p.2.1.filter fun a => tagOk pat (capTag a)).flatMap fun ax =>
     (p.2.2.filter fun a => tagOk pat (capTag a)).map fun ay => lebRF Δ X Y D p.1 ax ay
 
@@ -1018,7 +970,7 @@ def lAltsP (Δ X Y : Poly) (D : ℕ) (pat : List Bool) (p : RectE × (List CapA 
 has a consistent alternative, and every consistent combination plus the S-procedure terms is
 `≥ W`. -/
 def vertOk (D W : ℕ) (σ : Bool) (Δ X Y : Poly) (b0 b1 R : ℕ) (chs cvs : List SegE)
-    (crs : List RectE) (hbx vbx : List (List ℕ × List ℕ)) (c : VCert) : Bool :=
+    (crs : List RectM) (hbx vbx : List (List ℕ × List ℕ)) (c : VCert) : Bool :=
   hbx.length == chs.length && vbx.length == cvs.length &&
     c.hc.length == chs.length && c.vc.length == cvs.length && c.lc.length == crs.length &&
     c.splits.all (fun sp => sp.dm != 0 && sp.dp != 0) &&
@@ -1026,8 +978,8 @@ def vertOk (D W : ℕ) (σ : Bool) (Δ X Y : Poly) (b0 b1 R : ℕ) (chs cvs : Li
       segCOk σ Δ X Y b0 b1 R (hUps D q.1.1) (hLos D q.1.1) q.1.2 x.1) &&
     ((cvs.zip vbx).zip c.vc).all (fun q => q.2.all fun x =>
       segCOk σ Δ X Y b0 b1 R (vUps D q.1.1) (vLos D q.1.1) q.1.2 x.1) &&
-    (crs.zip c.lc).all (fun p => p.2.1.all (capAOk σ Δ X Y b0 b1 R c.splits (capX D p.1.1)) &&
-      p.2.2.all (capAOk σ Δ X Y b0 b1 R c.splits (capY D p.1.2.1))) &&
+    (crs.zip c.lc).all (fun p => p.2.1.all (capAOk σ Δ X Y b0 b1 R c.splits (capXm D p.1)) &&
+      p.2.2.all (capAOk σ Δ X Y b0 b1 R c.splits (capYm D p.1))) &&
     (pats c.splits.length).all fun pat =>
       c.hc.all (fun l => l.any fun x => tagOk pat x.2) &&
       c.vc.all (fun l => l.any fun x => tagOk pat x.2) &&
@@ -1104,37 +1056,39 @@ lemma capA_ge {σ : Bool} {Δ X Y : Poly} {b0 b1 R : ℕ} {u δ : ℝ} (h : VCtx
 lemma capAU_d (Δ X Y : Poly) {cap : SL} (hcap : cap.d ≠ 0) (a : CapA) : (capAU Δ X Y cap a).d ≠ 0 := by
   cases a <;> simp only [capAU] <;> exact ghU_d Δ X Y cap hcap _
 
-lemma lebRF_d (Δ X Y : Poly) {D : ℕ} (hD : 0 < D) (r : RectE) (ax ay : CapA) :
+lemma lebRF_d (Δ X Y : Poly) {D : ℕ} (hD : 0 < D) (r : RectM) (hmx : modeP r.2.1 = true)
+    (hmy : modeP r.2.2 = true) (ax ay : CapA) :
     (lebRF Δ X Y D r ax ay).d ≠ 0 := by
-  have a := capAU_d Δ X Y (cap := capX D r.1) (by simp [capX]; omega) ax
-  have b := capAU_d Δ X Y (cap := capY D r.2.1) (by simp [capY]; omega) ay
+  have a := capAU_d Δ X Y (cap := capXm D r) (capXm_d hD r hmx) ax
+  have b := capAU_d Δ X Y (cap := capYm D r) (capYm_d hD r hmy) ay
   exact Nat.mul_ne_zero one_ne_zero (RF.add_d _ (RF.add_d _ (by simp [RF.const])
     (by simpa [RF.neg] using a)) (by simpa [RF.neg] using b))
 
 lemma lebRF_le {D : ℕ} (hD : 0 < D) {σ : Bool} {Δ X Y : Poly} {b0 b1 R : ℕ} {u δ : ℝ}
-    (h : VCtx Δ X Y σ b0 b1 R u δ) (r : RectE) {ax ay : CapA}
+    (h : VCtx Δ X Y σ b0 b1 R u δ) (r : RectM) (hmx : modeP r.2.1 = true)
+    (hmy : modeP r.2.2 = true) {ax ay : CapA}
     (gx : SqArea.ghat (Real.sin (2 * Real.arctan u)) (Real.cos (2 * Real.arctan u))
-      ((capX D r.1).val u (vtx X Y δ u)) ≤ (capAU Δ X Y (capX D r.1) ax).eval δ u)
+      ((capXm D r).val u (vtx X Y δ u)) ≤ (capAU Δ X Y (capXm D r) ax).eval δ u)
     (gy : SqArea.ghat (Real.sin (2 * Real.arctan u)) (Real.cos (2 * Real.arctan u))
-      ((capY D r.2.1).val u (vtx X Y δ u)) ≤ (capAU Δ X Y (capY D r.2.1) ay).eval δ u) :
+      ((capYm D r).val u (vtx X Y δ u)) ≤ (capAU Δ X Y (capYm D r) ay).eval δ u) :
     (lebRF Δ X Y D r ax ay).eval δ u ≤
       (rectT (2 * Real.arctan u) D r).1 *
         (1 - SqArea.ghat (Real.sin (2 * Real.arctan u)) (Real.cos (2 * Real.arctan u))
           (aff (rectT (2 * Real.arctan u) D r).2.1 (vtx X Y δ u)) -
           SqArea.ghat (Real.sin (2 * Real.arctan u)) (Real.cos (2 * Real.arctan u))
           (aff (rectT (2 * Real.arctan u) D r).2.2 (vtx X Y δ u))) := by
-  have hcx : (capX D r.1).d ≠ 0 := by simp [capX]; omega
-  have hcy : (capY D r.2.1).d ≠ 0 := by simp [capY]; omega
-  have ex : aff (rectT (2 * Real.arctan u) D r).2.1 (vtx X Y δ u) = (capX D r.1).val u (vtx X Y δ u) := by
-    rw [val_capX hD h.hu0 h.hu1]; simp only [aff, rectT]; ring
-  have ey : aff (rectT (2 * Real.arctan u) D r).2.2 (vtx X Y δ u) = (capY D r.2.1).val u (vtx X Y δ u) := by
-    rw [val_capY hD h.hu0 h.hu1]; simp only [aff, rectT]; ring
+  have hcx : (capXm D r).d ≠ 0 := capXm_d hD r hmx
+  have hcy : (capYm D r).d ≠ 0 := capYm_d hD r hmy
+  have ex : aff (rectT (2 * Real.arctan u) D r).2.1 (vtx X Y δ u) = (capXm D r).val u (vtx X Y δ u) := by
+    rw [val_capXm hD h.hu0 h.hu1 r hmx]; rfl
+  have ey : aff (rectT (2 * Real.arctan u) D r).2.2 (vtx X Y δ u) = (capYm D r).val u (vtx X Y δ u) := by
+    rw [val_capYm hD h.hu0 h.hu1 r hmy]; rfl
   rw [ex, ey]
   have dx := capAU_d Δ X Y hcx ax
   have dy := capAU_d Δ X Y hcy ay
   have d1 : (RF.const 1 1).d ≠ 0 := by simp [RF.const]
-  have d2 : (RF.neg (capAU Δ X Y (capX D r.1) ax)).d ≠ 0 := by simpa [RF.neg] using dx
-  have d3 : (RF.neg (capAU Δ X Y (capY D r.2.1) ay)).d ≠ 0 := by simpa [RF.neg] using dy
+  have d2 : (RF.neg (capAU Δ X Y (capXm D r) ax)).d ≠ 0 := by simpa [RF.neg] using dx
+  have d3 : (RF.neg (capAU Δ X Y (capYm D r) ay)).d ≠ 0 := by simpa [RF.neg] using dy
   rw [lebRF, eval_mul h.ok (by simp [RF.const]) (RF.add_d _ (RF.add_d _ d1 d2) d3),
     eval_add h.ok h.hΔ (RF.add_d _ d1 d2) d3, eval_add h.ok h.hΔ d1 d2, eval_neg, eval_neg,
     eval_const, eval_const]
@@ -1218,10 +1172,10 @@ lemma totOk_sound {σ : Bool} {Δ X Y : Poly} {b0 b1 R : ℕ} {u δ : ℝ} (h : 
 
 /-- **Soundness of the test at a vertex**: `W ≤ fE(v)`. -/
 theorem vertOk_sound {D W : ℕ} (hD : 0 < D) {σ : Bool} {Δ X Y : Poly} {b0 b1 R : ℕ} {u δ : ℝ}
-    (h : VCtx Δ X Y σ b0 b1 R u δ) {chs cvs : List SegE} {crs : List RectE}
+    (h : VCtx Δ X Y σ b0 b1 R u δ) {chs cvs : List SegE} {crs : List RectM}
     (hch : ∀ e ∈ chs, e.1 < e.2.2.1) (hcv : ∀ e ∈ cvs, e.2.1 < e.2.2.2.1)
     {hbx vbx : List (List ℕ × List ℕ)} (hbd : BoxDom D u (vtx X Y δ u) chs cvs hbx vbx) {c : VCert}
-    (hsq : ∀ sp ∈ c.splits, sp.q.d ≠ 0)
+    (hsq : ∀ sp ∈ c.splits, sp.q.d ≠ 0) (hmd : ∀ r ∈ crs, modeP r.2.1 = true ∧ modeP r.2.2 = true)
     (hok : vertOk D W σ Δ X Y b0 b1 R chs cvs crs hbx vbx c = true) :
     (W : ℝ) ≤ fE (Real.sin (2 * Real.arctan u)) (Real.cos (2 * Real.arctan u))
       (chs.map (hsegT (2 * Real.arctan u) D) ++ cvs.map (vsegT (2 * Real.arctan u) D))
@@ -1274,10 +1228,11 @@ theorem vertOk_sound {D W : ℕ} (hD : 0 < D) {σ : Bool} {Δ X Y : Poly} {b0 b1
     have hn := nl p.2 (List.of_mem_zip hp).2
     obtain ⟨ax, hax, hxt⟩ := List.any_eq_true.mp hn.1
     obtain ⟨ay, hay, hyt⟩ := List.any_eq_true.mp hn.2
-    have gx := capA_ge h (by simp [capX]; omega) (hk.1 ax hax) hxt
-    have gy := capA_ge h (by simp [capY]; omega) (hk.2 ay hay) hyt
+    have hm := hmd p.1 (List.of_mem_zip hp).1
+    have gx := capA_ge h (capXm_d hD p.1 hm.1) (hk.1 ax hax) hxt
+    have gy := capA_ge h (capYm_d hD p.1 hm.2) (hk.2 ay hay) hyt
     refine ⟨lebRF Δ X Y D p.1 ax ay, List.mem_flatMap.mpr ⟨ax, List.mem_filter.mpr ⟨hax, hxt⟩,
-      List.mem_map.mpr ⟨ay, List.mem_filter.mpr ⟨hay, hyt⟩, rfl⟩⟩, lebRF_le hD h p.1 gx gy⟩
+      List.mem_map.mpr ⟨ay, List.mem_filter.mpr ⟨hay, hyt⟩, rfl⟩⟩, lebRF_le hD h p.1 hm.1 hm.2 gx gy⟩
   obtain ⟨c1, hc1, hs1⟩ := exists_comb_zip (f := fun t => t.eval δ u) _ _ _ hH'
   obtain ⟨c2, hc2, hs2⟩ := exists_comb_zip (f := fun t => t.eval δ u) _ _ _ hV'
   obtain ⟨c3, hc3, hs3⟩ := exists_comb_zip (f := fun t => t.eval δ u) _ _ _ hL'
@@ -1297,7 +1252,8 @@ theorem vertOk_sound {D W : ℕ} (hD : 0 < D) {σ : Bool} {Δ X Y : Poly} {b0 b1
       exact segCAlts_d hD (by omega) (hd_vUps hD q.1.1) (hd_vLos hD q.1.1) _ _ r hr
     · obtain ⟨ax, _, hr⟩ := List.mem_flatMap.mp hr
       obtain ⟨ay, _, rfl⟩ := List.mem_map.mp hr
-      exact lebRF_d Δ X Y hD p.1 ax ay
+      have hm := hmd p.1 (List.of_mem_zip hp).1
+      exact lebRF_d Δ X Y hD p.1 hm.1 hm.2 ax ay
   have dS : ∀ r ∈ (c.splits.zip pat).map (fun x => sproc Δ X Y x.1 x.2), r.d ≠ 0 := by
     intro r hr
     obtain ⟨x, hx, rfl⟩ := List.mem_map.mp hr

@@ -20,6 +20,7 @@ import Sqpack.LemmaZ
 import Sqpack.PolyMin
 import Sqpack.ChordE
 import Sqpack.LebE
+import Sqpack.LebTan
 import Sqpack.LemmaE
 import Sqpack.RatU
 import Sqpack.LemmaEPoly

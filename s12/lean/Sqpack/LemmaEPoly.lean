@@ -153,7 +153,50 @@ def capX (X0 : ℕ) : SL := ⟨(smul (-(2 * D : ℤ)) Np, [0],
 def capY (Y0 : ℕ) : SL := ⟨([0], smul (-(2 * D : ℤ)) Np,
   BernZ.add (smul (2 * Y0) Np) (smul (D : ℤ) (BernZ.add Cp Sp))), 0, 0, 1, 2 * D⟩
 
+/-- The `tan` transform of a cap line `aff P/(2DN)` at `d* = n/m` (`LemmaE.tanF`), over `S N 2Dm²`:
+`K = m(S + C) − nN`, numerator `mK·P + 2Dm²SC − DK² − 2DnNK + Dm²S²`. -/
+def tanK (n m : ℕ) : Poly := BernZ.add (smul (m : ℤ) (BernZ.add Sp Cp)) (smul (-(n : ℤ)) Np)
+
+def tanC (n m : ℕ) : Poly :=
+  BernZ.add (BernZ.add (smul (2 * D * m * m : ℤ) (BernZ.mul Sp Cp)) (smul (-(D : ℤ)) (BernZ.mul (tanK n m) (tanK n m))))
+    (BernZ.add (smul (-(2 * D * n) : ℤ) (BernZ.mul Np (tanK n m))) (smul (D * m * m : ℤ) (BernZ.mul Sp Sp)))
+
+def tanCap (n m : ℕ) (P : PL) : SL :=
+  let mK := smul (m : ℤ) (tanK n m)
+  ⟨(BernZ.mul mK P.1, BernZ.mul mK P.2.1, BernZ.add (BernZ.mul mK P.2.2) (tanC D n m)), 0, 1, 1, 2 * D * m * m⟩
+
+/-- The cap lines of a rectangle entry in its modes. -/
+def capXm (r : RectM) : SL :=
+  match r.2.1 with
+  | none => capX D r.1.1
+  | some (n, m) => tanCap D n m (capX D r.1.1).P
+def capYm (r : RectM) : SL :=
+  match r.2.2 with
+  | none => capY D r.1.2.1
+  | some (n, m) => tanCap D n m (capY D r.1.2.1).P
+
 end lines
+
+/-- A mode is well formed: `d* = n/m` with `0 < m`, `n ≤ m`. -/
+def modeP : Option (ℕ × ℕ) → Bool
+  | none => true
+  | some (n, m) => Nat.blt 0 m && Nat.ble n m
+
+lemma capXm_d {D : ℕ} (hD : 0 < D) (r : RectM) (hm : modeP r.2.1 = true) : (capXm D r).d ≠ 0 := by
+  rcases r with ⟨r, mx, my⟩
+  match mx, hm with
+  | none, _ => simp only [capXm, capX]; omega
+  | some (n, m), hm =>
+    simp only [modeP, Bool.and_eq_true, Nat.blt_eq, Nat.ble_eq] at hm
+    simp only [capXm, tanCap, ne_eq, mul_eq_zero, not_or]; omega
+
+lemma capYm_d {D : ℕ} (hD : 0 < D) (r : RectM) (hm : modeP r.2.2 = true) : (capYm D r).d ≠ 0 := by
+  rcases r with ⟨r, mx, my⟩
+  match my, hm with
+  | none, _ => simp only [capYm, capY]; omega
+  | some (n, m), hm =>
+    simp only [modeP, Bool.and_eq_true, Nat.blt_eq, Nat.ble_eq] at hm
+    simp only [capYm, tanCap, ne_eq, mul_eq_zero, not_or]; omega
 
 /-- `sin θ = 2u/(1+u²)`, `cos θ = (1−u²)/(1+u²)` at `θ = 2 arctan u`. -/
 lemma trig (u : ℝ) : Real.sin (2 * Real.arctan u) = 2 * u / (1 + u ^ 2) ∧
@@ -262,6 +305,53 @@ lemma val_capY (Y0 : ℕ) (c : ℝ × ℝ) :
   push_cast
   field_simp
   ring
+
+lemma val_tanCap (n m : ℕ) (hm : 0 < m) (P : PL) (c : ℝ × ℝ) :
+    (tanCap D n m P).val u c =
+      (Real.sin (2 * Real.arctan u) + Real.cos (2 * Real.arctan u) - (n : ℝ) / m) /
+          Real.sin (2 * Real.arctan u) * (SL.mk P 0 0 1 (2 * D)).val u c +
+        (Real.cos (2 * Real.arctan u) -
+          (Real.sin (2 * Real.arctan u) + Real.cos (2 * Real.arctan u) - (n : ℝ) / m) ^ 2 /
+            (2 * Real.sin (2 * Real.arctan u)) -
+          (Real.sin (2 * Real.arctan u) + Real.cos (2 * Real.arctan u) - (n : ℝ) / m) * ((n : ℝ) / m) /
+            Real.sin (2 * Real.arctan u) + Real.sin (2 * Real.arctan u) / 2) := by
+  obtain ⟨h1, h2, h3, h4⟩ := pos_facts hD hu0 hu1
+  have hmr : (0 : ℝ) < m := by exact_mod_cast hm
+  simp only [SL.val, sden, tanCap, tanC, tanK, aff, evalPL, (trig u).1, (trig u).2, BernZ.eval_smul,
+    BernZ.eval_add, BernZ.eval_mul, eval_Cp, eval_Sp, eval_Np]
+  push_cast
+  field_simp
+  ring
+
+lemma val_capXm (r : RectM) (hm : modeP r.2.1 = true) (c : ℝ × ℝ) :
+    (capXm D r).val u c = aff (capFm (2 * Real.arctan u) r.2.1
+      (-1, 0, (r.1.1 : ℝ) / D + (Real.cos (2 * Real.arctan u) + Real.sin (2 * Real.arctan u)) / 2)) c := by
+  rcases r with ⟨r, mx, my⟩
+  match mx, hm with
+  | none, _ =>
+    simp only [capXm, capFm]
+    rw [val_capX hD hu0 hu1]; simp only [aff]; ring
+  | some (n, m), hm =>
+    simp only [modeP, Bool.and_eq_true, Nat.blt_eq, Nat.ble_eq] at hm
+    simp only [capXm, capFm]
+    rw [val_tanCap hD hu0 hu1 n m hm.1, aff_tanF, show SL.mk (capX D r.1).P 0 0 1 (2 * D) = capX D r.1 from rfl,
+      val_capX hD hu0 hu1]
+    simp only [aff]; ring
+
+lemma val_capYm (r : RectM) (hm : modeP r.2.2 = true) (c : ℝ × ℝ) :
+    (capYm D r).val u c = aff (capFm (2 * Real.arctan u) r.2.2
+      (0, -1, (r.1.2.1 : ℝ) / D + (Real.cos (2 * Real.arctan u) + Real.sin (2 * Real.arctan u)) / 2)) c := by
+  rcases r with ⟨r, mx, my⟩
+  match my, hm with
+  | none, _ =>
+    simp only [capYm, capFm]
+    rw [val_capY hD hu0 hu1]; simp only [aff]; ring
+  | some (n, m), hm =>
+    simp only [modeP, Bool.and_eq_true, Nat.blt_eq, Nat.ble_eq] at hm
+    simp only [capYm, capFm]
+    rw [val_tanCap hD hu0 hu1 n m hm.1, aff_tanF, show SL.mk (capY D r.2.1).P 0 0 1 (2 * D) = capY D r.2.1 from rfl,
+      val_capY hD hu0 hu1]
+    simp only [aff]; ring
 
 end identities
 
