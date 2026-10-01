@@ -103,6 +103,11 @@ def pairOk (D W R U0 U1 : ℕ) (side : List PL) (chs cvs : List SegE) (crs : Lis
   | .par => (detP P Q).all (· == 0)
   | .bins sbs => binsOk D W R side chs cvs crs hbx vbx P Q U0 U1 sbs
 
+/-- One row: the certificates of `P` with the later lines `Ps` in order. -/
+def rowOk (D W R U0 U1 : ℕ) (side : List PL) (chs cvs : List SegE) (crs : List RectE)
+    (hbx vbx : List (List ℕ × List ℕ)) (P : PL) (Ps : List PL) (cs : List PairCert) : Bool :=
+  cs.length == Ps.length && (Ps.zip cs).all (fun q => pairOk D W R U0 U1 side chs cvs crs hbx vbx P q.1 q.2)
+
 /-- All pairs `i < j` of a list, the certificates of `L[i]` with the later lines in order. -/
 def allPairsOk (D W R U0 U1 : ℕ) (side : List PL) (chs cvs : List SegE) (crs : List RectE)
     (hbx vbx : List (List ℕ × List ℕ)) :
@@ -110,8 +115,43 @@ def allPairsOk (D W R U0 U1 : ℕ) (side : List PL) (chs cvs : List SegE) (crs :
   | [], _ => true
   | _ :: _, [] => false
   | P :: Ps, cs :: css =>
-    cs.length == Ps.length && (Ps.zip cs).all (fun q => pairOk D W R U0 U1 side chs cvs crs hbx vbx P q.1 q.2) &&
+    rowOk D W R U0 U1 side chs cvs crs hbx vbx P Ps cs &&
       allPairsOk D W R U0 U1 side chs cvs crs hbx vbx Ps css
+
+/-! ### Splitting the check into small theorems
+
+A leaf is checked row by row, or pair by pair, each in its own `decide`; these steps glue the
+pieces back together along `List.drop`. -/
+
+lemma all_drop_step {α : Type*} (p : α → Bool) (l : List α) (i : ℕ) (d : α) (hi : i < l.length)
+    (h1 : p (l.getD i d) = true) (h2 : (l.drop (i + 1)).all p = true) : (l.drop i).all p = true := by
+  rw [List.drop_eq_getElem_cons hi, List.all_cons, h2, Bool.and_true]
+  rwa [List.getD_eq_getElem _ _ hi] at h1
+
+lemma all_drop_end {α : Type*} (p : α → Bool) (l : List α) (m : ℕ) (h : l.length ≤ m) :
+    (l.drop m).all p = true := by
+  simp [List.drop_eq_nil_of_le h]
+
+lemma rowOk_of {D W R U0 U1 : ℕ} {side : List PL} {chs cvs : List SegE} {crs : List RectE}
+    {hbx vbx : List (List ℕ × List ℕ)} {P : PL} {Ps : List PL} {cs : List PairCert}
+    (hl : cs.length = Ps.length)
+    (h : ((Ps.zip cs).drop 0).all (fun q => pairOk D W R U0 U1 side chs cvs crs hbx vbx P q.1 q.2) = true) :
+    rowOk D W R U0 U1 side chs cvs crs hbx vbx P Ps cs = true := by
+  simpa [rowOk, hl] using h
+
+lemma allPairsOk_drop_step {D W R U0 U1 : ℕ} {side : List PL} {chs cvs : List SegE} {crs : List RectE}
+    {hbx vbx : List (List ℕ × List ℕ)} (L : List PL) (C : List (List PairCert)) (i : ℕ) (d : PL)
+    (hi : i < L.length) (hc : i < C.length)
+    (h1 : rowOk D W R U0 U1 side chs cvs crs hbx vbx (L.getD i d) (L.drop (i + 1)) (C.getD i []) = true)
+    (h2 : allPairsOk D W R U0 U1 side chs cvs crs hbx vbx (L.drop (i + 1)) (C.drop (i + 1)) = true) :
+    allPairsOk D W R U0 U1 side chs cvs crs hbx vbx (L.drop i) (C.drop i) = true := by
+  rw [List.drop_eq_getElem_cons hi, List.drop_eq_getElem_cons hc, allPairsOk, h2, Bool.and_true]
+  rwa [List.getD_eq_getElem _ _ hi, List.getD_eq_getElem _ _ hc] at h1
+
+lemma allPairsOk_drop_end {D W R U0 U1 : ℕ} {side : List PL} {chs cvs : List SegE} {crs : List RectE}
+    {hbx vbx : List (List ℕ × List ℕ)} (L : List PL) (C : List (List PairCert)) (m : ℕ) (h : L.length ≤ m) :
+    allPairsOk D W R U0 U1 side chs cvs crs hbx vbx (L.drop m) C = true := by
+  simp [List.drop_eq_nil_of_le h, allPairsOk]
 
 /-! ## 3.  Soundness of the pair certificates -/
 
@@ -222,7 +262,7 @@ lemma allPairs_sound {D W R U0 U1 : ℕ} {side : List PL} {chs cvs : List SegE} 
   | [], _, _, i, j, _, hj => absurd hj (by simp)
   | _ :: _, [], h, _, _, _, _ => by simp [allPairsOk] at h
   | P :: Ps, cs :: css, h, i, j, hij, hj => by
-    simp only [allPairsOk, Bool.and_eq_true, beq_iff_eq, List.all_eq_true] at h
+    simp only [allPairsOk, rowOk, Bool.and_eq_true, beq_iff_eq, List.all_eq_true] at h
     obtain ⟨⟨hl, hall⟩, hrest⟩ := h
     cases i with
     | zero =>
@@ -537,6 +577,34 @@ def exOk (D S R W x0 x1 y0 y1 U0 U1 : ℕ) (segs : List SegE) (rects : List Rect
     (lf.cvs.zip lf.vbx).all (fun q => boxDomOk (D * S) x0 x1 y0 y1 U0 U1 R lf.wx lf.wy
       (vUps D q.1) (vLos D q.1) q.2) &&
     allPairsOk D W R U0 U1 side lf.chs lf.cvs lf.crs lf.hbx lf.vbx (side ++ lf.Ls) lf.certs
+
+/-- Everything in `exOk` except the pair certificates. -/
+def exHead (D S R W x0 x1 y0 y1 U0 U1 : ℕ) (segs : List SegE) (rects : List RectE) (lf : ExLeaf) :
+    Bool :=
+  let side := sideL (D * S) x0 x1 y0 y1 lf.wx lf.wy
+  let pin := pinOk (D * S) x0 x1 y0 y1 U0 U1 R lf.wx lf.wy lf.Ls
+  Nat.blt U1 R && Nat.ble U0 U1 && decide (lf.chs ++ lf.cvs).Nodup && decide lf.crs.Nodup &&
+    lf.chs.all (fun e => segs.contains e && e.2.1 == e.2.2.2.1 && Nat.blt e.1 e.2.2.1 &&
+      (hFormsSLs D e).all pin) &&
+    lf.cvs.all (fun e => segs.contains e && e.1 == e.2.2.1 && Nat.blt e.2.1 e.2.2.2.1 &&
+      (vFormsSLs D e).all pin) &&
+    lf.crs.all (fun r => rects.contains r &&
+      Nat.ble (2 * x1 * widD R U0 + D * S * widN R U0 U1) (2 * r.2.2.1 * S * widD R U0) &&
+      Nat.ble (2 * y1 * widD R U0 + D * S * widN R U0 U1) (2 * r.2.2.2.1 * S * widD R U0) &&
+      (lebSLs D r).all pin) &&
+    lf.hbx.length == lf.chs.length && lf.vbx.length == lf.cvs.length &&
+    (lf.chs.zip lf.hbx).all (fun q => boxDomOk (D * S) x0 x1 y0 y1 U0 U1 R lf.wx lf.wy
+      (hUps D q.1) (hLos D q.1) q.2) &&
+    (lf.cvs.zip lf.vbx).all (fun q => boxDomOk (D * S) x0 x1 y0 y1 U0 U1 R lf.wx lf.wy
+      (vUps D q.1) (vLos D q.1) q.2)
+
+lemma exOk_of {D S R W x0 x1 y0 y1 U0 U1 : ℕ} {segs : List SegE} {rects : List RectE} {lf : ExLeaf}
+    (h1 : exHead D S R W x0 x1 y0 y1 U0 U1 segs rects lf = true)
+    (h2 : allPairsOk D W R U0 U1 (sideL (D * S) x0 x1 y0 y1 lf.wx lf.wy) lf.chs lf.cvs lf.crs lf.hbx lf.vbx
+      (sideL (D * S) x0 x1 y0 y1 lf.wx lf.wy ++ lf.Ls) lf.certs = true) :
+    exOk D S R W x0 x1 y0 y1 U0 U1 segs rects lf = true := by
+  simp only [exHead] at h1
+  simp only [exOk, h1, h2, Bool.and_self]
 
 lemma pinned_of_formsSL {Q x0 x1 y0 y1 U0 U1 R : ℕ} (hQ : 0 < Q) (hR : 0 < R) {wx wy : Bool}
     {Ls : List PL} {u : ℝ} (hu0 : 0 < u) (hu1 : u < 1) (hb0 : (U0 : ℝ) / R ≤ u)
