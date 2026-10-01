@@ -261,6 +261,153 @@ lemma exists_u_of_theta45 {θ : ℝ} (hθ : θ ∈ Set.Icc 0 (Real.pi / 4)) :
     rwa [div_le_div_iff_of_pos_right hN] at this
   exact ⟨u, hu0, by nlinarith, by linarith, he⟩
 
+/-- **The covering statement from a pose tree**: every closed unit square in `[0, Mq/D]²` captures
+mass `≥ 1` of the mixed cover (`mcoverP`), from a `CovT` root and the face `θ = 0`. -/
+theorem cover_of_tree (D S Mq R Um W : ℕ) (pts : PTree) (segs : STree) (rects : List RectE)
+    (hD : 0 < D) (hS : 0 < S) (hR : 0 < R) (hUm : R ≤ 2 * Um) (hnd : pts.toList.Nodup)
+    (hrnd : rects.Nodup) (hsym : d4Check Mq pts = true) (hssym : segD4Check Mq segs = true)
+    (hrsym : rectD4Check Mq rects = true)
+    (hcov0 : CovMP D S Mq R W pts.toList segs.toList rects 0 (Mq * S - Mq * S / 2) 0
+      (Mq * S - Mq * S / 2) 0 0)
+    (hcov : CovT D S Mq R W pts.toList segs.toList rects 0 (Mq * S - Mq * S / 2) 0
+      (Mq * S - Mq * S / 2) 0 Um)
+    (hW : 0 < W) :
+    ∀ (c : ℝ × ℝ) (θ : ℝ), sq c θ 1 ⊆ box ((Mq : ℝ) / D) →
+      1 ≤ (mcoverP D W pts segs rects).measure (sq c θ 1) := by
+  classical
+  set m : ℝ := (Mq : ℝ) / D with hm
+  set M := mcoverP D W pts segs rects with hMdef
+  have hWr : (0 : ℝ) < W := by exact_mod_cast hW
+  have hDr : (0 : ℝ) < D := by exact_mod_cast hD
+  have hSr : (0 : ℝ) < S := by exact_mod_cast hS
+  have hRr : (0 : ℝ) < R := by exact_mod_cast hR
+  -- the data facts
+  simp only [segD4Check, Bool.and_eq_true] at hssym
+  obtain ⟨hschain, hsall⟩ := hssym
+  have hsnd : segs.toList.Nodup := STree.nodup_of_chainB _ hschain
+  have pentry_ok : ∀ e ∈ pts.toList.toFinset,
+      e.1 ≤ Mq ∧ (Mq - e.1, e.2.1, e.2.2) ∈ pts.toList.toFinset ∧
+        (e.2.1, e.1, e.2.2) ∈ pts.toList.toFinset := by
+    intro e he
+    have h2 := (PTree.all_iff _ pts).mp hsym e (List.mem_toFinset.mp he)
+    simp only [Bool.and_eq_true, Nat.ble_eq] at h2
+    exact ⟨h2.1.1, List.mem_toFinset.mpr (PTree.mem_sound _ _ h2.1.2),
+      List.mem_toFinset.mpr (PTree.mem_sound _ _ h2.2)⟩
+  have sentry_ok : ∀ e ∈ segs.toList.toFinset,
+      ptLt e.1 e.2.1 e.2.2.1 e.2.2.2.1 = true ∧ e.1 ≤ Mq ∧ e.2.2.1 ≤ Mq ∧
+        sXg Mq e ∈ segs.toList.toFinset ∧ sSg e ∈ segs.toList.toFinset := by
+    intro e he
+    have h2 := (STree.all_iff _ segs).mp hsall e (List.mem_toFinset.mp he)
+    simp only [Bool.and_eq_true, Nat.ble_eq] at h2
+    exact ⟨h2.1.1.1.1, h2.1.1.1.2, h2.1.1.2, List.mem_toFinset.mpr (STree.mem_sound _ _ h2.1.2),
+      List.mem_toFinset.mpr (STree.mem_sound _ _ h2.2)⟩
+  have rentry_ok : ∀ e ∈ rects.toFinset,
+      e.1 ≤ e.2.2.1 ∧ e.2.1 ≤ e.2.2.2.1 ∧ e.2.2.1 ≤ Mq ∧ rXg Mq e ∈ rects.toFinset ∧
+        rSg e ∈ rects.toFinset := by
+    intro e he
+    simp only [rectD4Check, List.all_eq_true] at hrsym
+    have h2 := hrsym e (List.mem_toFinset.mp he)
+    simp only [Bool.and_eq_true, Nat.ble_eq, List.contains_iff_mem] at h2
+    exact ⟨h2.1.1.1.1, h2.1.1.1.2, h2.1.1.2, List.mem_toFinset.mpr h2.1.2,
+      List.mem_toFinset.mpr h2.2⟩
+  have hnonneg : M.Nonneg :=
+    ⟨fun _ _ => by simp only [hMdef, mcoverP]; positivity,
+     fun _ _ => by simp only [hMdef, mcoverP]; positivity,
+     fun _ _ => by simp only [hMdef, mcoverP]; positivity⟩
+  have hvolX : ∀ e ∈ rects.toFinset, volume (rectSet D (rXg Mq e)) = volume (rectSet D e) := by
+    intro e he
+    obtain ⟨h1, _, h3, _, _⟩ := rentry_ok e he
+    rw [rectSet_rXg Mq D hD e h1 h3]
+    exact (measurePreserving_reflX m).measure_preimage (measurableSet_rectSet D e).nullMeasurableSet
+  have hvolS : ∀ e, volume (rectSet D (rSg e)) = volume (rectSet D e) := by
+    intro e
+    rw [rectSet_rSg]
+    exact measurePreserving_swapXY.measure_preimage (measurableSet_rectSet D e).nullMeasurableSet
+  -- D4 invariance of the measure
+  have hinv : D4InvM m M.measure := by
+    refine M.d4InvM m (fun e _ => measurableSet_rectSet D e) (fun e => (Mq - e.1, e.2.1, e.2.2))
+      (fun e => (e.2.1, e.1, e.2.2)) (sXg Mq) sSg (rXg Mq) rSg ?_ ?_ ?_ ?_ ?_ ?_
+    · intro e he
+      obtain ⟨hx, hpX, _⟩ := pentry_ok e he
+      refine ⟨hpX, ?_, rfl, ?_⟩
+      · change ptR D (Mq - e.1, e.2.1, e.2.2) = reflX m (ptR D e)
+        simp only [ptR, reflX, hm, Nat.cast_sub hx]
+        ext
+        · simp only; field_simp
+        · simp
+      · obtain ⟨a, b, c⟩ := e
+        simp only at hx ⊢
+        ext <;> simp; omega
+    · intro e he
+      obtain ⟨h, ha, hc, hsX, _⟩ := sentry_ok e he
+      obtain ⟨h1, h2, h3⟩ := sXg_eq Mq D e h ha hc
+      refine ⟨hsX, ?_, h1, h3⟩
+      change ((sXg Mq e).2.2.2.2 : ℝ) / W = (e.2.2.2.2 : ℝ) / W
+      rw [h2]
+    · intro e he
+      obtain ⟨h1, _, h3, hrX, _⟩ := rentry_ok e he
+      refine ⟨hrX, ?_, ?_, rectSet_rXg Mq D hD e h1 h3⟩
+      · change ((rXg Mq e).2.2.2.2 : ℝ) * (volume (rectSet D (rXg Mq e))).toReal / W =
+          (e.2.2.2.2 : ℝ) * (volume (rectSet D e)).toReal / W
+        rw [hvolX e he]; rfl
+      · obtain ⟨a, b, c, d, w⟩ := e
+        simp only [rXg] at h1 h3 ⊢
+        ext <;> simp <;> omega
+    · intro e he
+      exact ⟨(pentry_ok e he).2.2, rfl, rfl, rfl⟩
+    · intro e he
+      obtain ⟨h, _, _, _, hsS⟩ := sentry_ok e he
+      obtain ⟨h1, h2, h3⟩ := sSg_eq D e h
+      refine ⟨hsS, ?_, h1, h3⟩
+      change ((sSg e).2.2.2.2 : ℝ) / W = (e.2.2.2.2 : ℝ) / W
+      rw [h2]
+    · intro e he
+      obtain ⟨_, _, _, _, hrS⟩ := rentry_ok e he
+      refine ⟨hrS, ?_, rfl, rectSet_rSg D e⟩
+      change ((rSg e).2.2.2.2 : ℝ) * (volume (rectSet D (rSg e))).toReal / W =
+        (e.2.2.2.2 : ℝ) * (volume (rectSet D e)).toReal / W
+      rw [hvolS e]; rfl
+  -- the measure of a square is the mass
+  have hmass : ∀ (Qs : Set (ℝ × ℝ)), MeasurableSet Qs →
+      M.measure Qs = ENNReal.ofReal
+        ((ptMass D pts.toList Qs + segMass D segs.toList Qs + rectMass D rects Qs) / W) := by
+    intro Qs hQs
+    rw [M.measure_apply hnonneg hQs]
+    congr 1
+    simp only [MixedCover.mass, hMdef, mcoverP, ptMass, segMass, rectMass, gw_areaFrac]
+    rw [add_div, add_div, Finset.sum_div, Finset.sum_div, Finset.sum_div]
+    congr 1
+    · congr 1
+      refine Finset.sum_congr rfl fun e _ => ?_
+      ring
+  -- the region statement, from the tree
+  have hcover : ∀ (c : ℝ × ℝ) (θ : ℝ), sq c θ 1 ⊆ box m → 1 ≤ M.measure (sq c θ 1) := by
+    refine d4_reduction_measure m M.measure hinv fun c θ h1 h2 hθ hsub0 => ?_
+    obtain ⟨u, hu0, hu1, h45, rfl⟩ := exists_u_of_theta45 hθ
+    have hsub := hsub0
+    have hu : u ∈ Set.Icc (0 : ℝ) (1 / 2) := ⟨hu0, by linarith⟩
+    rw [hmass _ (measurableSet_sq _ _ _), ← ENNReal.ofReal_one]
+    apply ENNReal.ofReal_le_ofReal
+    have hhalf : m / 2 ≤ (((Mq * S - Mq * S / 2 : ℕ) : ℝ)) / (D * S) := by
+      have h2 : Mq * S ≤ 2 * (Mq * S - Mq * S / 2) := by omega
+      have h2r : ((Mq * S : ℕ) : ℝ) ≤ 2 * ((Mq * S - Mq * S / 2 : ℕ) : ℝ) := by exact_mod_cast h2
+      rw [hm, div_div, div_le_div_iff₀ (by positivity) (by positivity)]
+      push_cast at h2r
+      nlinarith
+    have hU : ((0 : ℕ) : ℝ) / R ≤ u := by simpa using hu.1
+    have hU1 : u ≤ (Um : ℝ) / R := by
+      rw [le_div_iff₀ hRr]
+      have : (R : ℝ) ≤ 2 * Um := by exact_mod_cast hUm
+      nlinarith [hu.2]
+    rw [le_div_iff₀ hWr, one_mul]
+    rcases eq_or_lt_of_le hu0 with h0 | h0
+    · subst h0
+      exact hcov0 c 0 (by simpa using h1.1) (le_trans h1.2 hhalf) (by simpa using h2.1)
+        (le_trans h2.2 hhalf) hU (by simp) hsub
+    · exact hcov c u (by simpa using h1.1) (le_trans h1.2 hhalf) (by simpa using h2.1)
+        (le_trans h2.2 hhalf) (by simpa using h0) hU1 h45 hsub
+  exact hcover
+
 /-- **The lower bound from a pose tree** (`le_minSide_mixedP` with the tree semantics `CovT` for
 `u > 0` and the face `θ = 0` separately). -/
 theorem le_minSide_mixedT (D S Mq R Um W : ℕ) (pts : PTree) (segs : STree) (rects : List RectE)
