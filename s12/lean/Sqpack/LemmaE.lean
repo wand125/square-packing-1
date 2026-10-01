@@ -1,6 +1,7 @@
 import Sqpack.ChordE
 import Sqpack.LebE
 import Sqpack.PolyMin
+import Sqpack.CovMP
 
 /-!
 # Lemma E at a fixed angle: the bound is least at a vertex of the arrangement
@@ -218,6 +219,163 @@ theorem exists_vertex_le_fE {s co : ℝ} (hs : 0 < s) (hc : 0 < co) {side Ls : L
   · rcases e2 with rfl | rfl
     · exact ht2
     · simp only [aff]; linarith
+
+/-! ## 3.  The bound is at most the mass at the pose -/
+
+section pose
+
+open ZMTreeM
+
+variable (θ : ℝ)
+
+/-- The chord ends on a horizontal line `y = η`, as affine forms of the centre. -/
+noncomputable def chA (η : ℝ) : ℝ × ℝ × ℝ :=
+  (1, Real.sin θ / Real.cos θ, (-(1 / 2) - η * Real.sin θ) / Real.cos θ)
+noncomputable def chB (η : ℝ) : ℝ × ℝ × ℝ :=
+  (1, -(Real.cos θ / Real.sin θ), (η * Real.cos θ - 1 / 2) / Real.sin θ)
+noncomputable def chC (η : ℝ) : ℝ × ℝ × ℝ :=
+  (1, Real.sin θ / Real.cos θ, (1 / 2 - η * Real.sin θ) / Real.cos θ)
+noncomputable def chD (η : ℝ) : ℝ × ℝ × ℝ :=
+  (1, -(Real.cos θ / Real.sin θ), (η * Real.cos θ + 1 / 2) / Real.sin θ)
+
+/-- The chord ends on a vertical line `x = ξ`. -/
+noncomputable def vLX (ξ : ℝ) : ℝ × ℝ × ℝ :=
+  (Real.cos θ / Real.sin θ, 1, (-(1 / 2) - ξ * Real.cos θ) / Real.sin θ)
+noncomputable def vUX (ξ : ℝ) : ℝ × ℝ × ℝ :=
+  (Real.cos θ / Real.sin θ, 1, (1 / 2 - ξ * Real.cos θ) / Real.sin θ)
+noncomputable def vLY (ξ : ℝ) : ℝ × ℝ × ℝ :=
+  (-(Real.sin θ / Real.cos θ), 1, (ξ * Real.sin θ - 1 / 2) / Real.cos θ)
+noncomputable def vUY (ξ : ℝ) : ℝ × ℝ × ℝ :=
+  (-(Real.sin θ / Real.cos θ), 1, (ξ * Real.sin θ + 1 / 2) / Real.cos θ)
+
+variable {θ}
+
+lemma aff_chA (hc : 0 < Real.cos θ) (η : ℝ) (c : ℝ × ℝ) : aff (chA θ η) c = tA θ η c := by
+  simp only [aff, chA, tA]; field_simp; ring
+lemma aff_chB (hs : 0 < Real.sin θ) (η : ℝ) (c : ℝ × ℝ) : aff (chB θ η) c = tB θ η c := by
+  simp only [aff, chB, tB]; field_simp; ring
+lemma aff_chC (hc : 0 < Real.cos θ) (η : ℝ) (c : ℝ × ℝ) : aff (chC θ η) c = tC θ η c := by
+  simp only [aff, chC, tC]; field_simp; ring
+lemma aff_chD (hs : 0 < Real.sin θ) (η : ℝ) (c : ℝ × ℝ) : aff (chD θ η) c = tD θ η c := by
+  simp only [aff, chD, tD]; field_simp; ring
+lemma aff_vLX (hs : 0 < Real.sin θ) (ξ : ℝ) (c : ℝ × ℝ) : aff (vLX θ ξ) c = SqArea.lowX c θ ξ := by
+  simp only [aff, vLX, SqArea.lowX]; field_simp; ring
+lemma aff_vUX (hs : 0 < Real.sin θ) (ξ : ℝ) (c : ℝ × ℝ) : aff (vUX θ ξ) c = SqArea.upX c θ ξ := by
+  simp only [aff, vUX, SqArea.upX]; field_simp; ring
+lemma aff_vLY (hc : 0 < Real.cos θ) (ξ : ℝ) (c : ℝ × ℝ) : aff (vLY θ ξ) c = SqArea.lowY c θ ξ := by
+  simp only [aff, vLY, SqArea.lowY]; field_simp; ring
+lemma aff_vUY (hc : 0 < Real.cos θ) (ξ : ℝ) (c : ℝ × ℝ) : aff (vUY θ ξ) c = SqArea.upY c θ ξ := by
+  simp only [aff, vUY, SqArea.upY]; field_simp; ring
+
+variable (θ)
+
+/-- The term of a horizontal segment entry. -/
+noncomputable def hsegT (D : ℕ) (e : SegE) : SegT :=
+  let A := (e.1 : ℝ) / D; let B := (e.2.2.1 : ℝ) / D; let η := (e.2.1 : ℝ) / D
+  ((e.2.2.2.2 : ℝ) / (B - A), B - A, formsOf A B (chA θ η) (chB θ η) (chC θ η) (chD θ η))
+
+/-- The term of a vertical segment entry. -/
+noncomputable def vsegT (D : ℕ) (e : SegE) : SegT :=
+  let A := (e.2.1 : ℝ) / D; let B := (e.2.2.2.1 : ℝ) / D; let ξ := (e.1 : ℝ) / D
+  ((e.2.2.2.2 : ℝ) / (B - A), B - A, formsOf A B (vLX θ ξ) (vLY θ ξ) (vUX θ ξ) (vUY θ ξ))
+
+/-- The term of a rectangle entry: `d_x = X0/D − x_min`, `d_y = Y0/D − y_min`. -/
+noncomputable def rectT (D : ℕ) (r : RectE) : LebT :=
+  ((r.2.2.2.2 : ℝ), (-1, 0, (r.1 : ℝ) / D + (Real.cos θ + Real.sin θ) / 2),
+    (0, -1, (r.2.1 : ℝ) / D + (Real.cos θ + Real.sin θ) / 2))
+
+variable {θ}
+
+/-- **The bound is at most the segment and rectangle mass** at the pose (claimed horizontal
+segments `chs`, vertical `cvs`, rectangles `crs` whose square lies left of and below their far
+sides). -/
+theorem fE_le_mass {D : ℕ} (hD : 0 < D) (hs : 0 < Real.sin θ) (hc : 0 < Real.cos θ) (c : ℝ × ℝ)
+    {segs : List SegE} {rects : List RectE} {chs cvs : List SegE} {crs : List RectE}
+    (hnd : (chs ++ cvs).Nodup) (hch : ∀ e ∈ chs, e ∈ segs ∧ e.2.1 = e.2.2.2.1 ∧ e.1 < e.2.2.1)
+    (hcv : ∀ e ∈ cvs, e ∈ segs ∧ e.1 = e.2.2.1 ∧ e.2.1 < e.2.2.2.1) (hcr : crs.Nodup)
+    (hcrs : ∀ r ∈ crs, r ∈ rects ∧
+      ∀ p ∈ sq c θ 1, p.1 ≤ (r.2.2.1 : ℝ) / D ∧ p.2 ≤ (r.2.2.2.1 : ℝ) / D) :
+    fE (Real.sin θ) (Real.cos θ) (chs.map (hsegT θ D) ++ cvs.map (vsegT θ D))
+        (crs.map (rectT θ D)) c ≤
+      segMass D segs (sq c θ 1) + rectMass D rects (sq c θ 1) := by
+  classical
+  have hDr : (0 : ℝ) < D := by exact_mod_cast hD
+  -- segments
+  set hp : SegE → SegE × ℝ × ℝ := fun e =>
+    partOf e ((e.1 : ℝ) / D) ((e.2.2.1 : ℝ) / D)
+      (max (aff (chA θ ((e.2.1 : ℝ) / D)) c) (aff (chB θ ((e.2.1 : ℝ) / D)) c))
+      (min (aff (chC θ ((e.2.1 : ℝ) / D)) c) (aff (chD θ ((e.2.1 : ℝ) / D)) c))
+  set vp : SegE → SegE × ℝ × ℝ := fun e =>
+    partOf e ((e.2.1 : ℝ) / D) ((e.2.2.2.1 : ℝ) / D)
+      (max (aff (vLX θ ((e.1 : ℝ) / D)) c) (aff (vLY θ ((e.1 : ℝ) / D)) c))
+      (min (aff (vUX θ ((e.1 : ℝ) / D)) c) (aff (vUY θ ((e.1 : ℝ) / D)) c))
+  set parts := chs.map hp ++ cvs.map vp with hparts
+  have hHp : ∀ e ∈ chs, PartOK D (sq c θ 1) (hp e) ∧ pval D (hp e) =
+      (hsegT θ D e).1 * max 0 (clampMin (hsegT θ D e).2.1 (hsegT θ D e).2.2 c) := by
+    intro e he
+    obtain ⟨_, hy, hx⟩ := hch e he
+    obtain ⟨h1, h2⟩ := hseg_part hD hs hc e hy hx c _ _ _ _ (aff_chA hc _ c) (aff_chB hs _ c)
+      (aff_chC hc _ c) (aff_chD hs _ c)
+    refine ⟨h1, ?_⟩
+    rw [h2]; simp only [hsegT]; ring
+  have hVp : ∀ e ∈ cvs, PartOK D (sq c θ 1) (vp e) ∧ pval D (vp e) =
+      (vsegT θ D e).1 * max 0 (clampMin (vsegT θ D e).2.1 (vsegT θ D e).2.2 c) := by
+    intro e he
+    obtain ⟨_, hx, hy⟩ := hcv e he
+    obtain ⟨h1, h2⟩ := vseg_part hD hs hc e hx hy c _ _ _ _ (aff_vLX hs _ c) (aff_vLY hc _ c)
+      (aff_vUX hs _ c) (aff_vUY hc _ c)
+    refine ⟨h1, ?_⟩
+    rw [h2]; simp only [vsegT]; ring
+  have hfst : parts.map Prod.fst = chs ++ cvs := by
+    simp only [hparts, List.map_append, List.map_map]
+    congr 1
+    · rw [show Prod.fst ∘ hp = id from rfl, List.map_id]
+    · rw [show Prod.fst ∘ vp = id from rfl, List.map_id]
+  have hpw : parts.Pairwise (fun p q => p.1 = q.1 → p.2.2 ≤ q.2.1) := by
+    have h := hnd
+    rw [← hfst, List.Nodup, List.pairwise_map] at h
+    exact h.imp fun hne heq => absurd heq hne
+  have hmem : ∀ p ∈ parts, p.1 ∈ segs.toFinset := by
+    intro p hpm
+    rcases List.mem_append.mp hpm with h | h
+    · obtain ⟨e, he, rfl⟩ := List.mem_map.mp h; exact List.mem_toFinset.mpr (hch e he).1
+    · obtain ⟨e, he, rfl⟩ := List.mem_map.mp h; exact List.mem_toFinset.mpr (hcv e he).1
+  have hok : ∀ p ∈ parts, PartOK D (sq c θ 1) p := by
+    intro p hpm
+    rcases List.mem_append.mp hpm with h | h
+    · obtain ⟨e, he, rfl⟩ := List.mem_map.mp h; exact (hHp e he).1
+    · obtain ⟨e, he, rfl⟩ := List.mem_map.mp h; exact (hVp e he).1
+  have Sg := parts_le_segMass hD segs (sq c θ 1) parts hmem hok hpw
+  have hsum : (parts.map (pval D)).sum =
+      ((chs.map (hsegT θ D) ++ cvs.map (vsegT θ D)).map
+        fun t => t.1 * max 0 (clampMin t.2.1 t.2.2 c)).sum := by
+    rw [hparts, List.map_append, List.map_append, List.sum_append, List.sum_append, List.map_map,
+      List.map_map, List.map_map, List.map_map]
+    congr 1
+    · congr 1; exact List.map_congr_left fun e he => (hHp e he).2
+    · congr 1; exact List.map_congr_left fun e he => (hVp e he).2
+  -- rectangles
+  have Rc : ((crs.map (rectT θ D)).map fun l => l.1 * (1 - SqArea.ghat (Real.sin θ) (Real.cos θ)
+      (aff l.2.1 c) - SqArea.ghat (Real.sin θ) (Real.cos θ) (aff l.2.2 c))).sum ≤
+      rectMass D rects (sq c θ 1) := by
+    rw [List.map_map, rectMass, ← List.sum_toFinset _ hcr]
+    refine le_trans (Finset.sum_le_sum fun r hr => ?_)
+      (Finset.sum_le_sum_of_subset_of_nonneg (fun r hr => List.mem_toFinset.mpr
+        (hcrs r (List.mem_toFinset.mp hr)).1) fun _ _ _ =>
+          mul_nonneg (Nat.cast_nonneg _) ENNReal.toReal_nonneg)
+    have h := SqArea.area_ge_ghat (c := c) hs hc (a1 := (r.1 : ℝ) / D) (a2 := (r.2.1 : ℝ) / D)
+      (hcrs r (List.mem_toFinset.mp hr)).2
+    have ex : aff (rectT θ D r).2.1 c = (r.1 : ℝ) / D - SqArea.xmin c θ := by
+      simp only [aff, rectT, SqArea.xmin]; ring
+    have ey : aff (rectT θ D r).2.2 c = (r.2.1 : ℝ) / D - SqArea.ymin c θ := by
+      simp only [aff, rectT, SqArea.ymin]; ring
+    simp only [Function.comp, ex, ey]
+    rw [Set.inter_comm] at h ⊢
+    exact mul_le_mul_of_nonneg_left h (Nat.cast_nonneg _)
+  simp only [fE]
+  linarith
+
+end pose
 
 end LemmaE
 
