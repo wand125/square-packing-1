@@ -708,12 +708,6 @@ inductive SegC where
   | box
   | alt (Ua La : List ℕ)
 
-/-- A certificate at a vertex. -/
-structure VCert where
-  hc : List SegC
-  vc : List SegC
-  lc : List (CapM × CapM)
-
 def segCAlts (Δ X Y : Poly) (w D len : ℕ) (ups los : List SL) (bx : List ℕ × List ℕ) : SegC → List RF
   | .drop => [RF.const 0 1]
   | .box => segAlts Δ X Y w D len ups los bx.1 bx.2
@@ -724,30 +718,6 @@ def segCOk (σ : Bool) (Δ X Y : Poly) (b0 b1 R : ℕ) (ups los : List SL) (bx :
   | .drop => true
   | .box => !bx.1.isEmpty && !bx.2.isEmpty && bx.1.all (· < ups.length) && bx.2.all (· < los.length)
   | .alt Ua La => segOkA σ Δ X Y b0 b1 R ups los Ua La
-
-def hAltsC (Δ X Y : Poly) (D : ℕ) (q : (SegE × (List ℕ × List ℕ)) × SegC) : List RF :=
-  segCAlts Δ X Y q.1.1.2.2.2.2 D (q.1.1.2.2.1 - q.1.1.1) (hUps D q.1.1) (hLos D q.1.1) q.1.2 q.2
-def vAltsC (Δ X Y : Poly) (D : ℕ) (q : (SegE × (List ℕ × List ℕ)) × SegC) : List RF :=
-  segCAlts Δ X Y q.1.1.2.2.2.2 D (q.1.1.2.2.2.1 - q.1.1.2.1) (vUps D q.1.1) (vLos D q.1.1) q.1.2 q.2
-
-/-- The alternatives of a rectangle's term `ρ (1 − U_x − U_y)`. -/
-def lebAlts (Δ X Y : Poly) (D : ℕ) (r : RectE) (mx my : CapM) : List RF :=
-  (capAlts Δ X Y (capX D r.1) mx).flatMap fun ux => (capAlts Δ X Y (capY D r.2.1) my).map fun uy =>
-    RF.mul (RF.const r.2.2.2.2 1) (RF.add Δ (RF.add Δ (RF.const 1 1) (RF.neg ux)) (RF.neg uy))
-
-/-- **The test at a vertex**: each claimed term's alternatives pass, and for every combination of
-alternatives the sum minus `W` is `≥ 0`. -/
-def vertOk (D W : ℕ) (σ : Bool) (Δ X Y : Poly) (b0 b1 R : ℕ) (chs cvs : List SegE)
-    (crs : List RectE) (hbx vbx : List (List ℕ × List ℕ)) (c : VCert) : Bool :=
-  hbx.length == chs.length && vbx.length == cvs.length &&
-    c.hc.length == chs.length && c.vc.length == cvs.length && c.lc.length == crs.length &&
-    ((chs.zip hbx).zip c.hc).all (fun q => segCOk σ Δ X Y b0 b1 R (hUps D q.1.1) (hLos D q.1.1) q.1.2 q.2) &&
-    ((cvs.zip vbx).zip c.vc).all (fun q => segCOk σ Δ X Y b0 b1 R (vUps D q.1.1) (vLos D q.1.1) q.1.2 q.2) &&
-    (crs.zip c.lc).all (fun p => capOk σ Δ X Y b0 b1 R (capX D p.1.1) p.2.1 &&
-      capOk σ Δ X Y b0 b1 R (capY D p.1.2.1) p.2.2) &&
-    (cprod (((chs.zip hbx).zip c.hc).map (hAltsC Δ X Y D) ++ ((cvs.zip vbx).zip c.vc).map (vAltsC Δ X Y D) ++
-      (crs.zip c.lc).map (fun p => lebAlts Δ X Y D p.1 p.2.1 p.2.2))).all fun comb =>
-      ckRF σ (sumRF Δ (comb ++ [RF.const (-(W : ℤ)) 1])) b0 b1 R
 
 lemma segVal_d {D : ℕ} (hD : 0 < D) {Δ X Y : Poly} {w len : ℕ} (hlen : len ≠ 0) {ups los : List SL}
     (hu : ∀ L ∈ ups, L.d ≠ 0) (hl : ∀ L ∈ los, L.d ≠ 0) (iu il : ℕ) :
@@ -777,50 +747,6 @@ lemma segCAlts_d {D : ℕ} (hD : 0 < D) {Δ X Y : Poly} {w len : ℕ} (hlen : le
     obtain ⟨a, _, hr⟩ := List.mem_flatMap.mp hr
     obtain ⟨b, _, rfl⟩ := List.mem_map.mp hr
     exact segVal_d hD hlen hu hl a b
-
-lemma lebAlts_d (Δ X Y : Poly) {D : ℕ} (hD : 0 < D) (r : RectE) {σ : Bool} {b0 b1 R : ℕ}
-    {mx my : CapM} (hx : capOk σ Δ X Y b0 b1 R (capX D r.1) mx = true)
-    (hy : capOk σ Δ X Y b0 b1 R (capY D r.2.1) my = true) :
-    ∀ t ∈ lebAlts Δ X Y D r mx my, t.d ≠ 0 := by
-  intro t ht
-  obtain ⟨ux, hux, ht⟩ := List.mem_flatMap.mp ht
-  obtain ⟨uy, huy, rfl⟩ := List.mem_map.mp ht
-  have a := capAlts_d Δ X Y (by simp [capX]; omega) σ b0 b1 R hx ux hux
-  have b := capAlts_d Δ X Y (by simp [capY]; omega) σ b0 b1 R hy uy huy
-  exact Nat.mul_ne_zero one_ne_zero (RF.add_d _ (RF.add_d _ (by simp [RF.const])
-    (by simpa [RF.neg] using a)) (by simpa [RF.neg] using b))
-
-/-- **A rectangle's term** is at least one of its alternatives. -/
-theorem leb_alt {D : ℕ} (hD : 0 < D) {σ : Bool} {Δ X Y : Poly} {b0 b1 R : ℕ} {u δ : ℝ}
-    (h : VCtx Δ X Y σ b0 b1 R u δ) (r : RectE) {mx my : CapM}
-    (hx : capOk σ Δ X Y b0 b1 R (capX D r.1) mx = true)
-    (hy : capOk σ Δ X Y b0 b1 R (capY D r.2.1) my = true) :
-    ∃ t ∈ lebAlts Δ X Y D r mx my, t.eval δ u ≤
-      (rectT (2 * Real.arctan u) D r).1 *
-        (1 - SqArea.ghat (Real.sin (2 * Real.arctan u)) (Real.cos (2 * Real.arctan u))
-          (aff (rectT (2 * Real.arctan u) D r).2.1 (vtx X Y δ u)) -
-          SqArea.ghat (Real.sin (2 * Real.arctan u)) (Real.cos (2 * Real.arctan u))
-          (aff (rectT (2 * Real.arctan u) D r).2.2 (vtx X Y δ u))) := by
-  have hcx : (capX D r.1).d ≠ 0 := by simp [capX]; omega
-  have hcy : (capY D r.2.1).d ≠ 0 := by simp [capY]; omega
-  obtain ⟨ux, hux, gx⟩ := capAlts_sound h hcx hx
-  obtain ⟨uy, huy, gy⟩ := capAlts_sound h hcy hy
-  have ex : aff (rectT (2 * Real.arctan u) D r).2.1 (vtx X Y δ u) = (capX D r.1).val u (vtx X Y δ u) := by
-    rw [val_capX hD h.hu0 h.hu1]; simp only [aff, rectT]; ring
-  have ey : aff (rectT (2 * Real.arctan u) D r).2.2 (vtx X Y δ u) = (capY D r.2.1).val u (vtx X Y δ u) := by
-    rw [val_capY hD h.hu0 h.hu1]; simp only [aff, rectT]; ring
-  refine ⟨_, List.mem_flatMap.mpr ⟨ux, hux, List.mem_map.mpr ⟨uy, huy, rfl⟩⟩, ?_⟩
-  rw [ex, ey]
-  have dx := capAlts_d Δ X Y hcx σ b0 b1 R hx ux hux
-  have dy := capAlts_d Δ X Y hcy σ b0 b1 R hy uy huy
-  have d1 : (RF.const 1 1).d ≠ 0 := by simp [RF.const]
-  have d2 : (RF.neg ux).d ≠ 0 := by simpa [RF.neg] using dx
-  have d3 : (RF.neg uy).d ≠ 0 := by simpa [RF.neg] using dy
-  rw [eval_mul h.ok (by simp [RF.const]) (RF.add_d _ (RF.add_d _ d1 d2) d3),
-    eval_add h.ok h.hΔ (RF.add_d _ d1 d2) d3, eval_add h.ok h.hΔ d1 d2, eval_neg, eval_neg,
-    eval_const, eval_const]
-  simp only [rectT, Int.cast_one, Nat.cast_one, div_one, Int.cast_natCast]
-  exact mul_le_mul_of_nonneg_left (by linarith) (Nat.cast_nonneg _)
 
 lemma exists_comb_zip {β : Type*} {f : RF → ℝ} :
     ∀ (ps : List β) (alts : β → List RF) (x : β → ℝ), (∀ p ∈ ps, ∃ t ∈ alts p, f t ≤ x p) →
@@ -854,58 +780,478 @@ def BoxDom (D : ℕ) (u : ℝ) (v : ℝ × ℝ) (chs cvs : List SegE) (hbx vbx :
   (∀ q ∈ chs.zip hbx, DomU u v (hUps D q.1) q.2.1 ∧ DomL u v (hLos D q.1) q.2.2) ∧
     (∀ q ∈ cvs.zip vbx, DomU u v (vUps D q.1) q.2.1 ∧ DomL u v (vLos D q.1) q.2.2)
 
+/-! ### Splits, tags, and the test at a vertex -/
+
+/-- A split of a vertex certificate on the sign of a scaled line `q` at the vertex, with S-procedure
+multipliers `nm/dm` (used where `q < 0`) and `np/dp` (used where `q ≥ 0`). -/
+structure Split where
+  q : SL
+  nm : ℕ
+  dm : ℕ
+  np : ℕ
+  dp : ℕ
+
+/-- A tag: usable always (`none`), or only when split `k` is on side `b` (`true`: `q ≥ 0`). -/
+abbrev Tag := Option (ℕ × Bool)
+
+def tagOk (pat : List Bool) : Tag → Bool
+  | none => true
+  | some (k, b) => pat.getD k false == b
+
+/-- All sign patterns of `n` splits. -/
+def pats : ℕ → List (List Bool)
+  | 0 => [[]]
+  | n + 1 => (pats n).flatMap fun p => [false :: p, true :: p]
+
+lemma mem_pats : ∀ p : List Bool, p ∈ pats p.length
+  | [] => by simp [pats]
+  | b :: p => by
+    simp only [List.length_cons, pats, List.mem_flatMap, List.mem_cons, List.mem_singleton,
+      List.not_mem_nil, or_false]
+    exact ⟨p, mem_pats p, by cases b <;> simp⟩
+
+/-- The S-procedure term of a split on side `b`: `μ⁺ q` subtracted where `q ≥ 0`, `μ⁻ q` added where
+`q < 0`; either way it is `≤ 0` on its side. -/
+def sproc (Δ X Y : Poly) (sp : Split) (b : Bool) : RF :=
+  if b then RF.neg (RF.mul (RF.const sp.np sp.dp) (sp.q.atV Δ X Y))
+  else RF.mul (RF.const sp.nm sp.dm) (sp.q.atV Δ X Y)
+
+/-- A cap alternative: `0` (checked `d ≤ 0` on the sub-bin, or by a split on `d` on its negative
+side), the parabola, or the line (checked `d ≥ s`, or by a split on `d − s` on its side `≥ 0`). -/
+inductive CapA where
+  | zeroC
+  | zeroT (k : ℕ)
+  | par
+  | parT (k : ℕ) (b : Bool)
+  | linC
+  | linT (k : ℕ)
+
+def capTag : CapA → Tag
+  | .zeroT k => some (k, false)
+  | .parT k b => some (k, b)
+  | .linT k => some (k, true)
+  | _ => none
+
+def splitAt (splits : List Split) (k : ℕ) : SL := (splits.getD k ⟨SL.cst 0 1, 0, 1, 0, 1⟩).q
+
+def capAOk (σ : Bool) (Δ X Y : Poly) (b0 b1 R : ℕ) (splits : List Split) (cap : SL) : CapA → Bool
+  | .zeroC => ghOk σ Δ X Y b0 b1 R cap 0
+  | .zeroT k => decide (k < splits.length) && splitAt splits k == cap
+  | .par => true
+  | .parT k _ => decide (k < splits.length)
+  | .linC => ghOk σ Δ X Y b0 b1 R cap 2
+  | .linT k => decide (k < splits.length) && splitAt splits k == cap.sub (sSL 1)
+
+def capAU (Δ X Y : Poly) (cap : SL) : CapA → RF
+  | .zeroC => ghU Δ X Y cap 0
+  | .zeroT _ => ghU Δ X Y cap 0
+  | .par => ghU Δ X Y cap 1
+  | .parT _ _ => ghU Δ X Y cap 1
+  | .linC => ghU Δ X Y cap 2
+  | .linT _ => ghU Δ X Y cap 2
+
+/-- The rectangle term `ρ (1 − U_x − U_y)` for two cap alternatives. -/
+def lebRF (Δ X Y : Poly) (D : ℕ) (r : RectE) (ax ay : CapA) : RF :=
+  RF.mul (RF.const r.2.2.2.2 1) (RF.add Δ (RF.add Δ (RF.const 1 1)
+    (RF.neg (capAU Δ X Y (capX D r.1) ax))) (RF.neg (capAU Δ X Y (capY D r.2.1) ay)))
+
+/-! ### Common-factor certificates (`qx2_zm._gcdcert`) -/
+
+/-- The numerator with the sign of the denominator folded in (`σ^e · num`). -/
+def snum (σ : Bool) (r : RF) : Poly := if σ || r.e % 2 == 0 then r.num else smul (-1) r.num
+
+lemma snum_sign {σ : Bool} {Δ X Y : Poly} {b0 b1 R : ℕ} {u δ : ℝ} (h : VCtx Δ X Y σ b0 b1 R u δ)
+    {r : RF} (hd : r.d ≠ 0) :
+    (0 ≤ r.eval δ u ↔ 0 ≤ eval (snum σ r) u) ∧ (r.eval δ u < 0 ↔ eval (snum σ r) u < 0) := by
+  have h1 : (0 : ℝ) < 1 - u ^ 2 := by nlinarith [h.hu0, h.hu1]
+  have h2 : (0 : ℝ) < 2 * u := by linarith [h.hu0]
+  have h3 : (0 : ℝ) < 1 + u ^ 2 := by positivity
+  have h4 : (0 : ℝ) < r.d := by exact_mod_cast Nat.pos_of_ne_zero hd
+  have hrest : 0 < (1 - u ^ 2) ^ r.i * (2 * u) ^ r.j * (1 + u ^ 2) ^ r.k * (r.d : ℝ) := by positivity
+  have hden : den r δ u = δ ^ r.e * ((1 - u ^ 2) ^ r.i * (2 * u) ^ r.j * (1 + u ^ 2) ^ r.k * r.d) := by
+    unfold den; ring
+  unfold RF.eval snum
+  rw [hden]
+  by_cases hpos : σ = true ∨ r.e % 2 = 0
+  · have hsel : (if σ || r.e % 2 == 0 then r.num else smul (-1) r.num) = r.num := by
+      rcases hpos with hp | hp <;> simp [hp]
+    rw [hsel]
+    have hδe : 0 < δ ^ r.e := by
+      rcases hpos with hp | hp
+      · have := h.hσ; simp only [hp, if_true] at this; exact pow_pos this _
+      · exact Even.pow_pos (Nat.even_iff.mpr hp) h.ok.hδ
+    have hD := mul_pos hδe hrest
+    exact ⟨⟨fun h0 => by
+        by_contra hc; push_neg at hc; have := div_neg_of_neg_of_pos hc hD; linarith,
+      fun h0 => div_nonneg h0 hD.le⟩,
+      ⟨fun h0 => by
+        by_contra hc; push_neg at hc; have := div_nonneg hc hD.le; linarith,
+      fun h0 => div_neg_of_neg_of_pos h0 hD⟩⟩
+  · simp only [not_or, Bool.not_eq_true] at hpos
+    obtain ⟨hp1, hp2⟩ := hpos
+    have hsel : (if σ || r.e % 2 == 0 then r.num else smul (-1) r.num) = smul (-1) r.num := by
+      simp [hp1, hp2]
+    rw [hsel, eval_smul]
+    have hσ := h.hσ; simp only [hp1, Bool.false_eq_true, if_false] at hσ
+    have hodd : Odd r.e := Nat.odd_iff.mpr (by omega)
+    have hδe : δ ^ r.e < 0 := hodd.pow_neg hσ
+    have hD := mul_neg_of_neg_of_pos hδe hrest
+    push_cast
+    constructor
+    · constructor
+      · intro h0
+        by_contra hc; push_neg at hc
+        have : 0 < eval r.num u := by linarith
+        have := div_neg_of_pos_of_neg this hD; linarith
+      · intro h0; exact div_nonneg_of_nonpos (by linarith) hD.le
+    · constructor
+      · intro h0
+        by_contra hc; push_neg at hc
+        have : eval r.num u ≤ 0 := by linarith
+        have := div_nonneg_of_nonpos this hD.le; linarith
+      · intro h0; exact div_neg_of_pos_of_neg (by linarith) hD
+
+/-- Trailing zeros removed. -/
+def ptrim (p : Poly) : Poly := (p.reverse.dropWhile (· == 0)).reverse
+
+lemma eval_append_zeros (p : Poly) (n : ℕ) (u : ℝ) : eval (p ++ List.replicate n 0) u = eval p u := by
+  induction p with
+  | nil =>
+    induction n with
+    | zero => simp
+    | succ n ih =>
+      simp only [List.nil_append, eval_nil] at ih ⊢
+      rw [List.replicate_succ, eval_cons, ih]; simp
+  | cons a p ih => simp [ih]
+
+lemma ptrim_spec (p : Poly) : ∃ n, p = ptrim p ++ List.replicate n 0 := by
+  unfold ptrim
+  obtain ⟨n, hn⟩ : ∃ n, p.reverse = List.replicate n 0 ++ p.reverse.dropWhile (· == 0) := by
+    generalize p.reverse = l
+    induction l with
+    | nil => exact ⟨0, by simp⟩
+    | cons a l ih =>
+      by_cases ha : a = 0
+      · subst ha; obtain ⟨n, hn⟩ := ih
+        refine ⟨n + 1, ?_⟩
+        simp only [List.dropWhile_cons, beq_self_eq_true, if_true]
+        rw [List.replicate_succ, List.cons_append, ← hn]
+      · exact ⟨0, by simp [List.dropWhile_cons, ha]⟩
+  refine ⟨n, ?_⟩
+  have := congrArg List.reverse hn
+  rw [List.reverse_reverse, List.reverse_append, List.reverse_replicate] at this
+  exact this
+
+lemma eval_ptrim (p : Poly) (u : ℝ) : eval (ptrim p) u = eval p u := by
+  obtain ⟨n, hn⟩ := ptrim_spec p
+  conv_rhs => rw [hn]
+  rw [eval_append_zeros]
+
+/-- Equality of polynomials up to trailing zeros. -/
+def peqb (p q : Poly) : Bool := ptrim p == ptrim q
+
+lemma eval_of_peqb {p q : Poly} (h : peqb p q = true) (u : ℝ) : eval p u = eval q u := by
+  simp only [peqb, beq_iff_eq] at h
+  rw [← eval_ptrim p, h, eval_ptrim]
+
+/-- Exact division of `p` by `g` over the integers (high coefficients first); any result is
+re-checked by multiplication, so it need not be proved correct. -/
+def divHL (rg : List ℤ) : ℕ → List ℤ → List ℤ
+  | 0, _ => []
+  | fuel + 1, rp =>
+    if rp.length < rg.length then [] else
+      match rp, rg with
+      | a :: _, b :: _ =>
+        let c := a / b
+        c :: divHL rg fuel (List.zipWith (fun x y => x - c * y) rp (rg ++ List.replicate (rp.length - rg.length) 0)).tail
+      | _, _ => []
+
+def pdiv (p g : Poly) : Poly :=
+  (divHL (ptrim g).reverse (ptrim p).length (ptrim p).reverse).reverse
+
+/-- A common-factor certificate: split `k`'s numerator is `G · g₁` with `g₁ = u^m g₁' > 0` on the
+sub-bin; then on that split's side the sign of `G` is known, and a total `T = G · c₁` is `≥ 0` there
+if `c₁` has the matching sign. -/
+structure FCert where
+  k : ℕ
+  G : Poly
+  g1 : Poly
+  m : ℕ
+
+def fcOk (σ : Bool) (Δ X Y : Poly) (b0 b1 R : ℕ) (splits : List Split) (pat : List Bool) (f : FCert)
+    (T : RF) : Bool :=
+  let c1 := pdiv (snum σ T) f.G
+  decide (f.k < splits.length) &&
+    peqb (snum σ ((splitAt splits f.k).atV Δ X Y)) (BernZ.mul f.G f.g1) &&
+    (f.g1.take f.m).all (· == 0) &&
+    checkPos (f.g1.drop f.m) ((f.g1.drop f.m).length - 1) b0 b1 R &&
+    peqb (snum σ T) (BernZ.mul f.G c1) &&
+    BernZ.check (if pat.getD f.k false then c1 else smul (-1) c1) (c1.length - 1) b0 b1 R
+
+/-- The total test: `T ≥ 0` by Bernstein, or by a common-factor certificate. -/
+def totOk (σ : Bool) (Δ X Y : Poly) (b0 b1 R : ℕ) (splits : List Split) (pat : List Bool)
+    (fcs : List FCert) (T : RF) : Bool :=
+  ckRF σ T b0 b1 R || fcs.any fun f => fcOk σ Δ X Y b0 b1 R splits pat f T
+
+/-- A certificate at a vertex. -/
+structure VCert where
+  splits : List Split
+  fcs : List FCert
+  hc : List (List (SegC × Tag))
+  vc : List (List (SegC × Tag))
+  lc : List (List CapA × List CapA)
+
+/-- The alternatives of a horizontal (vertical) segment consistent with a pattern. -/
+def hAltsP (Δ X Y : Poly) (D : ℕ) (pat : List Bool) (q : (SegE × (List ℕ × List ℕ)) × List (SegC × Tag)) :
+    List RF :=
+  (q.2.filter fun x => tagOk pat x.2).flatMap fun x =>
+    segCAlts Δ X Y q.1.1.2.2.2.2 D (q.1.1.2.2.1 - q.1.1.1) (hUps D q.1.1) (hLos D q.1.1) q.1.2 x.1
+def vAltsP (Δ X Y : Poly) (D : ℕ) (pat : List Bool) (q : (SegE × (List ℕ × List ℕ)) × List (SegC × Tag)) :
+    List RF :=
+  (q.2.filter fun x => tagOk pat x.2).flatMap fun x =>
+    segCAlts Δ X Y q.1.1.2.2.2.2 D (q.1.1.2.2.2.1 - q.1.1.2.1) (vUps D q.1.1) (vLos D q.1.1) q.1.2 x.1
+def lAltsP (Δ X Y : Poly) (D : ℕ) (pat : List Bool) (p : RectE × (List CapA × List CapA)) : List RF :=
+  (p.2.1.filter fun a => tagOk pat (capTag a)).flatMap fun ax =>
+    (p.2.2.filter fun a => tagOk pat (capTag a)).map fun ay => lebRF Δ X Y D p.1 ax ay
+
+/-- **The test at a vertex**: every choice is valid, for every sign pattern of the splits every term
+has a consistent alternative, and every consistent combination plus the S-procedure terms is
+`≥ W`. -/
+def vertOk (D W : ℕ) (σ : Bool) (Δ X Y : Poly) (b0 b1 R : ℕ) (chs cvs : List SegE)
+    (crs : List RectE) (hbx vbx : List (List ℕ × List ℕ)) (c : VCert) : Bool :=
+  hbx.length == chs.length && vbx.length == cvs.length &&
+    c.hc.length == chs.length && c.vc.length == cvs.length && c.lc.length == crs.length &&
+    c.splits.all (fun sp => sp.dm != 0 && sp.dp != 0) &&
+    ((chs.zip hbx).zip c.hc).all (fun q => q.2.all fun x =>
+      segCOk σ Δ X Y b0 b1 R (hUps D q.1.1) (hLos D q.1.1) q.1.2 x.1) &&
+    ((cvs.zip vbx).zip c.vc).all (fun q => q.2.all fun x =>
+      segCOk σ Δ X Y b0 b1 R (vUps D q.1.1) (vLos D q.1.1) q.1.2 x.1) &&
+    (crs.zip c.lc).all (fun p => p.2.1.all (capAOk σ Δ X Y b0 b1 R c.splits (capX D p.1.1)) &&
+      p.2.2.all (capAOk σ Δ X Y b0 b1 R c.splits (capY D p.1.2.1))) &&
+    (pats c.splits.length).all fun pat =>
+      c.hc.all (fun l => l.any fun x => tagOk pat x.2) &&
+      c.vc.all (fun l => l.any fun x => tagOk pat x.2) &&
+      c.lc.all (fun l => l.1.any (fun a => tagOk pat (capTag a)) && l.2.any (fun a => tagOk pat (capTag a))) &&
+      (cprod (((chs.zip hbx).zip c.hc).map (hAltsP Δ X Y D pat) ++
+          ((cvs.zip vbx).zip c.vc).map (vAltsP Δ X Y D pat) ++
+          (crs.zip c.lc).map (lAltsP Δ X Y D pat))).all fun comb =>
+        totOk σ Δ X Y b0 b1 R c.splits pat c.fcs (sumRF Δ (comb ++
+          (c.splits.zip pat).map (fun x => sproc Δ X Y x.1 x.2) ++ [RF.const (-(W : ℤ)) 1]))
+
+/-! ### Soundness -/
+
+/-- A segment choice: some alternative is at most the term. -/
+lemma segC_ge {σ : Bool} {Δ X Y : Poly} {b0 b1 R : ℕ} {u δ : ℝ} (h : VCtx Δ X Y σ b0 b1 R u δ)
+    {ups los : List SL} {bx : List ℕ × List ℕ} {sc : SegC} {w D len : ℕ} {T : ℝ} (hT : 0 ≤ T)
+    (hok : segCOk σ Δ X Y b0 b1 R ups los bx sc = true)
+    (hbox : DomU u (vtx X Y δ u) ups bx.1 ∧ DomL u (vtx X Y δ u) los bx.2)
+    (hcore : ∀ Ua La, Ua ≠ [] → La ≠ [] → (∀ a ∈ Ua, a < ups.length) → (∀ b ∈ La, b < los.length) →
+      DomU u (vtx X Y δ u) ups Ua → DomL u (vtx X Y δ u) los La →
+      ∃ t ∈ segAlts Δ X Y w D len ups los Ua La, t.eval δ u ≤ T)
+    (hdu : ∀ L ∈ ups, L.d ≠ 0) (hdl : ∀ L ∈ los, L.d ≠ 0) :
+    ∃ t ∈ segCAlts Δ X Y w D len ups los bx sc, t.eval δ u ≤ T := by
+  cases sc with
+  | drop => exact ⟨_, List.mem_singleton_self _, by rw [eval_const]; simpa using hT⟩
+  | box =>
+    simp only [segCOk, Bool.and_eq_true, Bool.not_eq_true', List.isEmpty_eq_false_iff,
+      List.all_eq_true, decide_eq_true_eq] at hok
+    obtain ⟨⟨⟨h1, h2⟩, h3⟩, h4⟩ := hok
+    exact hcore _ _ h1 h2 h3 h4 hbox.1 hbox.2
+  | alt Ua La =>
+    simp only [segCOk, segOkA, Bool.and_eq_true, Bool.not_eq_true', List.isEmpty_eq_false_iff,
+      List.all_eq_true, decide_eq_true_eq] at hok
+    obtain ⟨⟨⟨⟨⟨h1, h2⟩, h3⟩, h4⟩, h5⟩, h6⟩ := hok
+    exact hcore _ _ h1 h2 h3 h4 (domU_of_check h hdu h3 (List.all_eq_true.mpr h5))
+      (domL_of_check h hdl h4 (List.all_eq_true.mpr h6))
+
+/-- The pattern of the splits at the vertex: `true` where `q ≥ 0`. -/
+noncomputable def patAt (splits : List Split) (u : ℝ) (v : ℝ × ℝ) : List Bool :=
+  splits.map fun sp => decide (0 ≤ sp.q.val u v)
+
+lemma patAt_getD (splits : List Split) (u : ℝ) (v : ℝ × ℝ) {k : ℕ} (hk : k < splits.length) :
+    (patAt splits u v).getD k false = decide (0 ≤ (splitAt splits k).val u v) := by
+  rw [patAt, List.getD_eq_getElem _ _ (by simpa using hk), List.getElem_map, splitAt,
+    List.getD_eq_getElem _ _ hk]
+
+/-- A cap alternative consistent with the pattern at the vertex bounds `ĝ`. -/
+lemma capA_ge {σ : Bool} {Δ X Y : Poly} {b0 b1 R : ℕ} {u δ : ℝ} (h : VCtx Δ X Y σ b0 b1 R u δ)
+    {splits : List Split} {cap : SL} (hcap : cap.d ≠ 0) {a : CapA}
+    (hok : capAOk σ Δ X Y b0 b1 R splits cap a = true)
+    (htag : tagOk (patAt splits u (vtx X Y δ u)) (capTag a) = true) :
+    SqArea.ghat (Real.sin (2 * Real.arctan u)) (Real.cos (2 * Real.arctan u))
+      (cap.val u (vtx X Y δ u)) ≤ (capAU Δ X Y cap a).eval δ u := by
+  cases a with
+  | zeroC => exact ghU_sound h hcap hok
+  | par => exact ghat_le_parU h hcap
+  | parT _ _ => exact ghat_le_parU h hcap
+  | linC => exact ghU_sound h hcap hok
+  | zeroT k =>
+    simp only [capAOk, Bool.and_eq_true, decide_eq_true_eq, beq_iff_eq] at hok
+    simp only [capTag, tagOk, beq_iff_eq] at htag
+    rw [patAt_getD _ _ _ hok.1, hok.2] at htag
+    have hneg : cap.val u (vtx X Y δ u) < 0 := by simpa using htag
+    rw [ghat_zero_of hneg.le]
+    simp only [capAU, ghU, if_true, eval_const]; simp
+  | linT k =>
+    simp only [capAOk, Bool.and_eq_true, decide_eq_true_eq, beq_iff_eq] at hok
+    simp only [capTag, tagOk, beq_iff_eq] at htag
+    rw [patAt_getD _ _ _ hok.1, hok.2] at htag
+    have hpos : 0 ≤ (cap.sub (sSL 1)).val u (vtx X Y δ u) := by simpa using htag
+    rw [val_sub _ _ hcap (by simp [sSL]) h.hu0 h.hu1, val_sSL (by norm_num)] at hpos
+    simp only [Nat.cast_one, div_one] at hpos
+    exact ghat_le_linU h hcap (by linarith)
+
+lemma capAU_d (Δ X Y : Poly) {cap : SL} (hcap : cap.d ≠ 0) (a : CapA) : (capAU Δ X Y cap a).d ≠ 0 := by
+  cases a <;> simp only [capAU] <;> exact ghU_d Δ X Y cap hcap _
+
+lemma lebRF_d (Δ X Y : Poly) {D : ℕ} (hD : 0 < D) (r : RectE) (ax ay : CapA) :
+    (lebRF Δ X Y D r ax ay).d ≠ 0 := by
+  have a := capAU_d Δ X Y (cap := capX D r.1) (by simp [capX]; omega) ax
+  have b := capAU_d Δ X Y (cap := capY D r.2.1) (by simp [capY]; omega) ay
+  exact Nat.mul_ne_zero one_ne_zero (RF.add_d _ (RF.add_d _ (by simp [RF.const])
+    (by simpa [RF.neg] using a)) (by simpa [RF.neg] using b))
+
+lemma lebRF_le {D : ℕ} (hD : 0 < D) {σ : Bool} {Δ X Y : Poly} {b0 b1 R : ℕ} {u δ : ℝ}
+    (h : VCtx Δ X Y σ b0 b1 R u δ) (r : RectE) {ax ay : CapA}
+    (gx : SqArea.ghat (Real.sin (2 * Real.arctan u)) (Real.cos (2 * Real.arctan u))
+      ((capX D r.1).val u (vtx X Y δ u)) ≤ (capAU Δ X Y (capX D r.1) ax).eval δ u)
+    (gy : SqArea.ghat (Real.sin (2 * Real.arctan u)) (Real.cos (2 * Real.arctan u))
+      ((capY D r.2.1).val u (vtx X Y δ u)) ≤ (capAU Δ X Y (capY D r.2.1) ay).eval δ u) :
+    (lebRF Δ X Y D r ax ay).eval δ u ≤
+      (rectT (2 * Real.arctan u) D r).1 *
+        (1 - SqArea.ghat (Real.sin (2 * Real.arctan u)) (Real.cos (2 * Real.arctan u))
+          (aff (rectT (2 * Real.arctan u) D r).2.1 (vtx X Y δ u)) -
+          SqArea.ghat (Real.sin (2 * Real.arctan u)) (Real.cos (2 * Real.arctan u))
+          (aff (rectT (2 * Real.arctan u) D r).2.2 (vtx X Y δ u))) := by
+  have hcx : (capX D r.1).d ≠ 0 := by simp [capX]; omega
+  have hcy : (capY D r.2.1).d ≠ 0 := by simp [capY]; omega
+  have ex : aff (rectT (2 * Real.arctan u) D r).2.1 (vtx X Y δ u) = (capX D r.1).val u (vtx X Y δ u) := by
+    rw [val_capX hD h.hu0 h.hu1]; simp only [aff, rectT]; ring
+  have ey : aff (rectT (2 * Real.arctan u) D r).2.2 (vtx X Y δ u) = (capY D r.2.1).val u (vtx X Y δ u) := by
+    rw [val_capY hD h.hu0 h.hu1]; simp only [aff, rectT]; ring
+  rw [ex, ey]
+  have dx := capAU_d Δ X Y hcx ax
+  have dy := capAU_d Δ X Y hcy ay
+  have d1 : (RF.const 1 1).d ≠ 0 := by simp [RF.const]
+  have d2 : (RF.neg (capAU Δ X Y (capX D r.1) ax)).d ≠ 0 := by simpa [RF.neg] using dx
+  have d3 : (RF.neg (capAU Δ X Y (capY D r.2.1) ay)).d ≠ 0 := by simpa [RF.neg] using dy
+  rw [lebRF, eval_mul h.ok (by simp [RF.const]) (RF.add_d _ (RF.add_d _ d1 d2) d3),
+    eval_add h.ok h.hΔ (RF.add_d _ d1 d2) d3, eval_add h.ok h.hΔ d1 d2, eval_neg, eval_neg,
+    eval_const, eval_const]
+  simp only [rectT, Int.cast_one, Nat.cast_one, div_one, Int.cast_natCast]
+  exact mul_le_mul_of_nonneg_left (by linarith) (Nat.cast_nonneg _)
+
+lemma sproc_d (Δ X Y : Poly) {sp : Split} (hq : sp.q.d ≠ 0) (hm : sp.dm ≠ 0) (hp : sp.dp ≠ 0)
+    (b : Bool) : (sproc Δ X Y sp b).d ≠ 0 := by
+  cases b <;> simp [sproc, RF.neg, RF.mul, RF.const, SL.atV, hq, hm, hp]
+
+lemma sproc_le {σ : Bool} {Δ X Y : Poly} {b0 b1 R : ℕ} {u δ : ℝ} (h : VCtx Δ X Y σ b0 b1 R u δ)
+    {sp : Split} (hq : sp.q.d ≠ 0) (hm : sp.dm ≠ 0) (hp : sp.dp ≠ 0) :
+    (sproc Δ X Y sp (decide (0 ≤ sp.q.val u (vtx X Y δ u)))).eval δ u ≤ 0 := by
+  have e := eval_atV sp.q Δ X Y h.hΔ h.ok.hδ
+  by_cases hs : 0 ≤ sp.q.val u (vtx X Y δ u)
+  · simp only [hs, decide_true, sproc, if_true]
+    rw [eval_neg, eval_mul h.ok (by simp [RF.const, hp]) (by simpa [SL.atV] using hq), eval_const, e]
+    have : (0 : ℝ) ≤ (sp.np : ℤ) / (sp.dp : ℝ) := by push_cast; positivity
+    have h2 : 0 ≤ sp.q.val u (eval X u / δ, eval Y u / δ) := hs
+    nlinarith
+  · simp only [hs, decide_false, sproc, Bool.false_eq_true, if_false]
+    rw [eval_mul h.ok (by simp [RF.const, hm]) (by simpa [SL.atV] using hq), eval_const, e]
+    have : (0 : ℝ) ≤ (sp.nm : ℤ) / (sp.dm : ℝ) := by push_cast; positivity
+    have h2 : sp.q.val u (eval X u / δ, eval Y u / δ) < 0 := not_le.mp hs
+    nlinarith
+
+lemma list_sum_nonpos : ∀ (l : List ℝ), (∀ y ∈ l, y ≤ 0) → l.sum ≤ 0
+  | [], _ => by simp
+  | a :: l, h => by
+    simp only [List.sum_cons]
+    linarith [h a List.mem_cons_self, list_sum_nonpos l fun y hy => h y (List.mem_cons_of_mem _ hy)]
+
+/-- **Soundness of the total test.** -/
+lemma totOk_sound {σ : Bool} {Δ X Y : Poly} {b0 b1 R : ℕ} {u δ : ℝ} (h : VCtx Δ X Y σ b0 b1 R u δ)
+    {splits : List Split} (hsq : ∀ sp ∈ splits, sp.q.d ≠ 0) {fcs : List FCert} {T : RF}
+    (hT : T.d ≠ 0) (hok : totOk σ Δ X Y b0 b1 R splits (patAt splits u (vtx X Y δ u)) fcs T = true) :
+    0 ≤ T.eval δ u := by
+  simp only [totOk, Bool.or_eq_true, List.any_eq_true] at hok
+  rcases hok with hok | ⟨f, _, hf⟩
+  · exact ckRF_sound hok h hT
+  simp only [fcOk, Bool.and_eq_true, decide_eq_true_eq, List.all_eq_true, beq_iff_eq] at hf
+  obtain ⟨⟨⟨⟨⟨hk, hq⟩, hz⟩, hg⟩, hTc⟩, hc⟩ := hf
+  set q := splitAt splits f.k
+  have hqd : q.d ≠ 0 := by
+    have : q ∈ splits.map Split.q := by
+      simp only [q, splitAt, List.getD_eq_getElem _ _ hk]; exact List.mem_map_of_mem (List.getElem_mem _)
+    obtain ⟨sp, hsp, hspq⟩ := List.mem_map.mp this
+    rw [← hspq]; exact hsq sp hsp
+  -- `g₁ > 0`
+  have hg1 : 0 < eval f.g1 u := by
+    rw [eval_take_drop f.g1 f.m (List.all_eq_true.mpr fun x hx => by simpa using hz x hx) u]
+    exact mul_pos (pow_pos h.hu0 _) (pos_of_checkPos hg h.hR h.hb0 h.hb1)
+  have eq1 := eval_of_peqb hq u
+  have eq2 := eval_of_peqb hTc u
+  rw [BernZ.eval_mul] at eq1 eq2
+  set c1 := pdiv (snum σ T) f.G
+  have hqs := snum_sign h (r := q.atV Δ X Y) (by simpa [SL.atV] using hqd)
+  have hTs := snum_sign h hT
+  rw [eval_atV _ _ _ _ h.hΔ h.ok.hδ] at hqs
+  rw [patAt_getD _ _ _ hk] at hc
+  refine hTs.1.mpr ?_
+  rw [eq2]
+  by_cases hb : 0 ≤ q.val u (vtx X Y δ u)
+  · rw [show decide (0 ≤ q.val u (vtx X Y δ u)) = true from decide_eq_true hb, if_pos rfl] at hc
+    have hc' := BernZ.nonneg_of_check hc h.hR h.hb0 h.hb1
+    have hG : 0 ≤ eval f.G u := by
+      have := hqs.1.mp (by simpa [vtx] using hb)
+      rw [eq1] at this
+      exact nonneg_of_mul_nonneg_left this hg1
+    exact mul_nonneg hG hc'
+  · rw [show decide (0 ≤ q.val u (vtx X Y δ u)) = false from decide_eq_false hb,
+      if_neg (by simp)] at hc
+    have hc' := BernZ.nonneg_of_check hc h.hR h.hb0 h.hb1
+    rw [eval_smul] at hc'; push_cast at hc'
+    have hG : eval f.G u < 0 := by
+      have := hqs.2.mp (by simpa [vtx] using not_le.mp hb)
+      rw [eq1] at this
+      by_contra hc2; push_neg at hc2
+      have := mul_nonneg hc2 hg1.le; linarith
+    nlinarith
+
 /-- **Soundness of the test at a vertex**: `W ≤ fE(v)`. -/
 theorem vertOk_sound {D W : ℕ} (hD : 0 < D) {σ : Bool} {Δ X Y : Poly} {b0 b1 R : ℕ} {u δ : ℝ}
     (h : VCtx Δ X Y σ b0 b1 R u δ) {chs cvs : List SegE} {crs : List RectE}
     (hch : ∀ e ∈ chs, e.1 < e.2.2.1) (hcv : ∀ e ∈ cvs, e.2.1 < e.2.2.2.1)
     {hbx vbx : List (List ℕ × List ℕ)} (hbd : BoxDom D u (vtx X Y δ u) chs cvs hbx vbx) {c : VCert}
+    (hsq : ∀ sp ∈ c.splits, sp.q.d ≠ 0)
     (hok : vertOk D W σ Δ X Y b0 b1 R chs cvs crs hbx vbx c = true) :
     (W : ℝ) ≤ fE (Real.sin (2 * Real.arctan u)) (Real.cos (2 * Real.arctan u))
       (chs.map (hsegT (2 * Real.arctan u) D) ++ cvs.map (vsegT (2 * Real.arctan u) D))
       (crs.map (rectT (2 * Real.arctan u) D)) (vtx X Y δ u) := by
   simp only [vertOk, Bool.and_eq_true, beq_iff_eq, List.all_eq_true] at hok
-  obtain ⟨⟨⟨⟨⟨⟨⟨⟨lh, lv⟩, l1⟩, l2⟩, l3⟩, hH⟩, hV⟩, hL⟩, htot⟩ := hok
+  obtain ⟨⟨⟨⟨⟨⟨⟨⟨⟨lh, lv⟩, l1⟩, l2⟩, l3⟩, hsp⟩, hH⟩, hV⟩, hL⟩, hpat⟩ := hok
   set θ := 2 * Real.arctan u
   set v := vtx X Y δ u
-  -- each term is at least one of its alternatives
-  have segC_ge : ∀ (ups los : List SL) (e : SegE) (bx : List ℕ × List ℕ) (sc : SegC) (w len : ℕ)
-      (T : ℝ), 0 ≤ T →
-      segCOk σ Δ X Y b0 b1 R ups los bx sc = true →
-      (sc = .box → DomU u v ups bx.1 ∧ DomL u v los bx.2) →
-      (∀ Ua La, Ua ≠ [] → La ≠ [] → (∀ a ∈ Ua, a < ups.length) → (∀ b ∈ La, b < los.length) →
-        DomU u v ups Ua → DomL u v los La →
-        ∃ t ∈ segAlts Δ X Y w D len ups los Ua La, t.eval δ u ≤ T) →
-      (∀ L ∈ ups, L.d ≠ 0) → (∀ L ∈ los, L.d ≠ 0) →
-      ∃ t ∈ segCAlts Δ X Y w D len ups los bx sc, t.eval δ u ≤ T := by
-    intro ups los e bx sc w len T hT hok hbox hcore hdu hdl
-    cases sc with
-    | drop =>
-      exact ⟨_, List.mem_singleton_self _, by rw [eval_const]; simpa using hT⟩
-    | box =>
-      simp only [segCOk, Bool.and_eq_true, Bool.not_eq_true', List.isEmpty_eq_false_iff,
-        List.all_eq_true, decide_eq_true_eq] at hok
-      obtain ⟨⟨⟨h1, h2⟩, h3⟩, h4⟩ := hok
-      obtain ⟨du, dl⟩ := hbox rfl
-      exact hcore _ _ h1 h2 h3 h4 du dl
-    | alt Ua La =>
-      simp only [segCOk, segOkA, Bool.and_eq_true, Bool.not_eq_true', List.isEmpty_eq_false_iff,
-        List.all_eq_true, decide_eq_true_eq] at hok
-      obtain ⟨⟨⟨⟨⟨h1, h2⟩, h3⟩, h4⟩, h5⟩, h6⟩ := hok
-      exact hcore _ _ h1 h2 h3 h4 (domU_of_check h hdu h3 (List.all_eq_true.mpr h5))
-        (domL_of_check h hdl h4 (List.all_eq_true.mpr h6))
-  have hH' : ∀ q ∈ (chs.zip hbx).zip c.hc, ∃ t ∈ hAltsC Δ X Y D q, t.eval δ u ≤
+  set pat := patAt c.splits u v with hpatdef
+  have hpm : pat ∈ pats c.splits.length := by
+    have := mem_pats pat; simpa [pat, patAt] using this
+  obtain ⟨⟨⟨nh, nv⟩, nl⟩, htot⟩ := by simpa only [Bool.and_eq_true, List.all_eq_true] using hpat pat hpm
+  have hspd : ∀ sp ∈ c.splits, sp.dm ≠ 0 ∧ sp.dp ≠ 0 := fun sp hs => by
+    have := hsp sp hs; simp only [Bool.and_eq_true, bne_iff_ne, ne_eq] at this; exact this
+  -- every term has a consistent alternative below it
+  have hH' : ∀ q ∈ (chs.zip hbx).zip c.hc, ∃ t ∈ hAltsP Δ X Y D pat q, t.eval δ u ≤
       (hsegT θ D q.1.1).1 * max 0 (clampMin (hsegT θ D q.1.1).2.1 (hsegT θ D q.1.1).2.2 v) := by
     intro q hq
     have hq1 := (List.of_mem_zip hq).1
     have hx := hch q.1.1 (List.of_mem_zip hq1).1
     have hDr : (0 : ℝ) < D := by exact_mod_cast hD
     have hAB : (q.1.1.1 : ℝ) / D < q.1.1.2.2.1 / D := div_lt_div_of_pos_right (by exact_mod_cast hx) hDr
-    refine segC_ge _ _ q.1.1 q.1.2 q.2 _ _ _
+    obtain ⟨x, hxm, hxt⟩ := List.any_eq_true.mp (nh q.2 (List.of_mem_zip hq).2)
+    obtain ⟨t, ht, hle⟩ := segC_ge h (sc := x.1)
       (mul_nonneg (by simp only [hsegT]; exact div_nonneg (Nat.cast_nonneg _) (by linarith))
-        (le_max_left _ _)) (hH q hq) (fun _ => hbd.1 q.1 hq1)
+        (le_max_left _ _)) ((hH q hq) x hxm) (hbd.1 q.1 hq1)
       (fun Ua La h1 h2 h3 h4 du dl => hseg_dom hD h hx h1 h2 h3 h4 du dl)
       (hd_hUps hD q.1.1) (hd_hLos hD q.1.1)
-  have hV' : ∀ q ∈ (cvs.zip vbx).zip c.vc, ∃ t ∈ vAltsC Δ X Y D q, t.eval δ u ≤
+    exact ⟨t, List.mem_flatMap.mpr ⟨x, List.mem_filter.mpr ⟨hxm, hxt⟩, ht⟩, hle⟩
+  have hV' : ∀ q ∈ (cvs.zip vbx).zip c.vc, ∃ t ∈ vAltsP Δ X Y D pat q, t.eval δ u ≤
       (vsegT θ D q.1.1).1 * max 0 (clampMin (vsegT θ D q.1.1).2.1 (vsegT θ D q.1.1).2.2 v) := by
     intro q hq
     have hq1 := (List.of_mem_zip hq).1
@@ -913,41 +1259,74 @@ theorem vertOk_sound {D W : ℕ} (hD : 0 < D) {σ : Bool} {Δ X Y : Poly} {b0 b1
     have hDr : (0 : ℝ) < D := by exact_mod_cast hD
     have hAB : (q.1.1.2.1 : ℝ) / D < q.1.1.2.2.2.1 / D :=
       div_lt_div_of_pos_right (by exact_mod_cast hx) hDr
-    refine segC_ge _ _ q.1.1 q.1.2 q.2 _ _ _
+    obtain ⟨x, hxm, hxt⟩ := List.any_eq_true.mp (nv q.2 (List.of_mem_zip hq).2)
+    obtain ⟨t, ht, hle⟩ := segC_ge h (sc := x.1)
       (mul_nonneg (by simp only [vsegT]; exact div_nonneg (Nat.cast_nonneg _) (by linarith))
-        (le_max_left _ _)) (hV q hq) (fun _ => hbd.2 q.1 hq1)
+        (le_max_left _ _)) ((hV q hq) x hxm) (hbd.2 q.1 hq1)
       (fun Ua La h1 h2 h3 h4 du dl => vseg_dom hD h hx h1 h2 h3 h4 du dl)
       (hd_vUps hD q.1.1) (hd_vLos hD q.1.1)
-  have hL' : ∀ p ∈ crs.zip c.lc, ∃ t ∈ lebAlts Δ X Y D p.1 p.2.1 p.2.2, t.eval δ u ≤
+    exact ⟨t, List.mem_flatMap.mpr ⟨x, List.mem_filter.mpr ⟨hxm, hxt⟩, ht⟩, hle⟩
+  have hL' : ∀ p ∈ crs.zip c.lc, ∃ t ∈ lAltsP Δ X Y D pat p, t.eval δ u ≤
       (rectT θ D p.1).1 * (1 - SqArea.ghat (Real.sin θ) (Real.cos θ) (aff (rectT θ D p.1).2.1 v) -
         SqArea.ghat (Real.sin θ) (Real.cos θ) (aff (rectT θ D p.1).2.2 v)) := by
     intro p hp
     have hk := hL p hp
-    exact leb_alt hD h p.1 hk.1 hk.2
+    have hn := nl p.2 (List.of_mem_zip hp).2
+    obtain ⟨ax, hax, hxt⟩ := List.any_eq_true.mp hn.1
+    obtain ⟨ay, hay, hyt⟩ := List.any_eq_true.mp hn.2
+    have gx := capA_ge h (by simp [capX]; omega) (hk.1 ax hax) hxt
+    have gy := capA_ge h (by simp [capY]; omega) (hk.2 ay hay) hyt
+    refine ⟨lebRF Δ X Y D p.1 ax ay, List.mem_flatMap.mpr ⟨ax, List.mem_filter.mpr ⟨hax, hxt⟩,
+      List.mem_map.mpr ⟨ay, List.mem_filter.mpr ⟨hay, hyt⟩, rfl⟩⟩, lebRF_le hD h p.1 gx gy⟩
   obtain ⟨c1, hc1, hs1⟩ := exists_comb_zip (f := fun t => t.eval δ u) _ _ _ hH'
   obtain ⟨c2, hc2, hs2⟩ := exists_comb_zip (f := fun t => t.eval δ u) _ _ _ hV'
   obtain ⟨c3, hc3, hs3⟩ := exists_comb_zip (f := fun t => t.eval δ u) _ _ _ hL'
   have hcomb := cprod_append _ _ (cprod_append _ _ hc1 hc2) hc3
   -- constants
-  have dAll : ∀ l ∈ ((chs.zip hbx).zip c.hc).map (hAltsC Δ X Y D) ++
-      ((cvs.zip vbx).zip c.vc).map (vAltsC Δ X Y D) ++
-      (crs.zip c.lc).map (fun p => lebAlts Δ X Y D p.1 p.2.1 p.2.2), ∀ r ∈ l, r.d ≠ 0 := by
+  have dAll : ∀ l ∈ ((chs.zip hbx).zip c.hc).map (hAltsP Δ X Y D pat) ++
+      ((cvs.zip vbx).zip c.vc).map (vAltsP Δ X Y D pat) ++
+      (crs.zip c.lc).map (lAltsP Δ X Y D pat), ∀ r ∈ l, r.d ≠ 0 := by
     intro l hl r hr
     simp only [List.mem_append, List.mem_map] at hl
     rcases hl with (⟨q, hq, rfl⟩ | ⟨q, hq, rfl⟩) | ⟨p, hp, rfl⟩
     · have hx := hch q.1.1 (List.of_mem_zip (List.of_mem_zip hq).1).1
+      obtain ⟨x, _, hr⟩ := List.mem_flatMap.mp hr
       exact segCAlts_d hD (by omega) (hd_hUps hD q.1.1) (hd_hLos hD q.1.1) _ _ r hr
     · have hx := hcv q.1.1 (List.of_mem_zip (List.of_mem_zip hq).1).1
+      obtain ⟨x, _, hr⟩ := List.mem_flatMap.mp hr
       exact segCAlts_d hD (by omega) (hd_vUps hD q.1.1) (hd_vLos hD q.1.1) _ _ r hr
-    · have hk := hL p hp
-      exact lebAlts_d Δ X Y hD p.1 hk.1 hk.2 r hr
-  have hall : ∀ r ∈ c1 ++ c2 ++ c3 ++ [RF.const (-(W : ℤ)) 1], r.d ≠ 0 := by
+    · obtain ⟨ax, _, hr⟩ := List.mem_flatMap.mp hr
+      obtain ⟨ay, _, rfl⟩ := List.mem_map.mp hr
+      exact lebRF_d Δ X Y hD p.1 ax ay
+  have dS : ∀ r ∈ (c.splits.zip pat).map (fun x => sproc Δ X Y x.1 x.2), r.d ≠ 0 := by
+    intro r hr
+    obtain ⟨x, hx, rfl⟩ := List.mem_map.mp hr
+    have hs := (List.of_mem_zip hx).1
+    exact sproc_d Δ X Y (hsq x.1 hs) (hspd x.1 hs).1 (hspd x.1 hs).2 x.2
+  have hall : ∀ r ∈ c1 ++ c2 ++ c3 ++ (c.splits.zip pat).map (fun x => sproc Δ X Y x.1 x.2) ++
+      [RF.const (-(W : ℤ)) 1], r.d ≠ 0 := by
     intro r hr
     rcases List.mem_append.mp hr with hr | hr
-    · exact mem_cprod (P := fun r => r.d ≠ 0) _ dAll _ hcomb r hr
+    · rcases List.mem_append.mp hr with hr | hr
+      · exact mem_cprod (P := fun r => r.d ≠ 0) _ dAll _ hcomb r hr
+      · exact dS r hr
     · simp at hr; subst hr; simp [RF.const]
-  have h0 := ckRF_sound (htot _ hcomb) h (sumRF_d Δ _ hall)
-  rw [eval_sumRF h.ok h.hΔ _ hall] at h0
+  have h0 := totOk_sound h hsq (sumRF_d Δ _ (by simpa [List.append_assoc] using hall)) (htot _ hcomb)
+  rw [eval_sumRF h.ok h.hΔ _ (by simpa [List.append_assoc] using hall)] at h0
+  -- the S-procedure terms are `≤ 0`
+  have hsp0 : (((c.splits.zip pat).map (fun x => sproc Δ X Y x.1 x.2)).map (fun r => r.eval δ u)).sum ≤ 0 := by
+    refine list_sum_nonpos _ fun y hy => ?_
+    simp only [List.map_map, List.mem_map] at hy
+    obtain ⟨x, hx, rfl⟩ := hy
+    have hs := (List.of_mem_zip hx).1
+    have hxp : x.2 = decide (0 ≤ x.1.q.val u v) := by
+      obtain ⟨k, hk, hkx⟩ := List.mem_iff_getElem.mp hx
+      simp only [List.getElem_zip] at hkx
+      rw [← hkx]
+      simp [pat, patAt]
+    simp only [Function.comp]
+    rw [hxp]
+    exact sproc_le h (hsq x.1 hs) (hspd x.1 hs).1 (hspd x.1 hs).2
   simp only [List.map_append, List.sum_append, List.map_cons, List.map_nil, List.sum_cons,
     List.sum_nil, eval_const] at h0
   have z1 := sum_map_zip_fst (chs.zip hbx) c.hc
@@ -967,7 +1346,7 @@ theorem vertOk_sound {D W : ℕ} (hD : 0 < D) {σ : Bool} {Δ X Y : Poly} {b0 b1
   rw [z2, z2'] at hs2
   rw [z3] at hs3
   simp only [fE, List.map_append, List.sum_append, List.map_map]
-  simp only [Function.comp_def, List.map_map] at h0 hs1 hs2 hs3 ⊢
+  simp only [Function.comp_def, List.map_map] at h0 hs1 hs2 hs3 hsp0 ⊢
   push_cast at h0
   linarith
 

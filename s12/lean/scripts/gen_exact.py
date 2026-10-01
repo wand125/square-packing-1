@@ -78,41 +78,63 @@ class Leaf:
             Ls.append(P)
         self.Ls = Ls
         self.side = sideL(Q, x0, x1, y0, y1, self.wx, self.wy)
+        import itertools
+        def boxalts(ups, los):
+            for k in (1, 2, 3):
+                for Ua in itertools.combinations(range(3), k):
+                    for kk in (1, 2, 3):
+                        for La in itertools.combinations(range(3), kk):
+                            if boxDomOk(Q, x0, x1, y0, y1, U0, U1, R, self.wx, self.wy, ups, los,
+                                        (list(Ua), list(La))):
+                                return (list(Ua), list(La))
+        self.hbx = [boxalts(hUps(D, e), hLos(D, e)) for e in self.chs]
+        self.vbx = [boxalts(vUps(D, e), vLos(D, e)) for e in self.cvs]
         return Ls
 
     # -------------------------------------------------------------- one sub-bin of a pair
-    def choose(self, Dp, X, Y, b0, b1):
-        """float-guided choices at the vertex: per segment (iu, il) or None, per rectangle modes"""
+    def choose(self, Dp, X, Y, b0, b1, lam=(1, 1)):
+        """float-guided choices at the vertex: per segment ('drop',) / ('box',) / ('alt', Ua, La),
+        per rectangle the cap modes"""
         R = self.R
-        us = [b0 / R + (b1 - b0) / R * t for t in (0.02, 0.5, 0.98)]
-        us = [max(u, 1e-9) for u in us]
+        ts = (0.0, 0.25, 0.5, 0.75, 1.0)
+        us = [max(b0 / R + (b1 - b0) / R * t, 1e-9) for t in ts]
         pts = []
         for u in us:
             dv = ev(Dp, u)
             pts.append((u, (ev(X, u) / dv, ev(Y, u) / dv)))
-        def pick(ups, los):
-            best = None
+        tol = 1e-9
+        def pick(ups, los, bx):
+            Ua, La, pos = set(), set(), False
             for u, v in pts:
                 uv = [svals(L, u, v) for L in ups]; lv = [svals(L, u, v) for L in los]
-                iu = min(range(3), key=lambda i: uv[i]); il = max(range(3), key=lambda i: lv[i])
-                if uv[iu] - lv[il] > 1e-12: best = (iu, il) if best is None else best
-            if best is None: return None
-            u, v = pts[1]
-            uv = [svals(L, u, v) for L in ups]; lv = [svals(L, u, v) for L in los]
-            return (min(range(3), key=lambda i: uv[i]), max(range(3), key=lambda i: lv[i]))
-        hc = [pick(hUps(self.D, e), hLos(self.D, e)) for e in self.chs]
-        vc = [pick(vUps(self.D, e), vLos(self.D, e)) for e in self.cvs]
+                mu = min(uv); ml = max(lv)
+                Ua |= {i for i in range(3) if uv[i] <= mu + tol}
+                La |= {i for i in range(3) if lv[i] >= ml - tol}
+                if mu - ml > 1e-12: pos = True
+            if not pos: return ('drop',)
+            if len(bx[0]) * len(bx[1]) <= len(Ua) * len(La): return ('box',)
+            return ('alt', sorted(Ua), sorted(La))
+        hc = [pick(hUps(self.D, e), hLos(self.D, e), bx) for e, bx in zip(self.chs, self.hbx)]
+        vc = [pick(vUps(self.D, e), vLos(self.D, e), bx) for e, bx in zip(self.cvs, self.vbx)]
         lc = []
         for r in self.crs:
             modes = []
             for cap in (capX(self.D, r[0]), capY(self.D, r[1])):
                 ds = [svals(cap, u, v) for u, v in pts]
                 ss = [2 * u / (1 + u * u) for u, _ in pts]
-                if all(d <= 0 for d in ds): modes.append(0)
-                elif all(d >= s for d, s in zip(ds, ss)): modes.append(2)
-                else: modes.append(1)
+                if all(d <= 0 for d in ds): modes.append(('zero',))
+                elif all(d >= s for d, s in zip(ds, ss)): modes.append(('lin',))
+                elif all(0 <= d <= s for d, s in zip(ds, ss)): modes.append(('par',))
+                elif any(d < 0 for d in ds): modes.append(('zp', 0, 1, lam[0], lam[1]))
+                else: modes.append(('pl', lam[0], lam[1], 0, 1))
             lc.append(tuple(modes))
-        return hc, vc, lc
+        ncomb = 1
+        for o, bx in zip(hc + vc, self.hbx + self.vbx):
+            if o[0] == 'box': ncomb *= len(bx[0]) * len(bx[1])
+            elif o[0] == 'alt': ncomb *= len(o[1]) * len(o[2])
+        for mx, my in lc:
+            ncomb *= (2 if mx[0] in ('zp', 'pl') else 1) * (2 if my[0] in ('zp', 'pl') else 1)
+        return hc, vc, lc, ncomb
 
     def sub(self, P, Qp, b0, b1, depth):
         """certificates for [b0, b1] (list of sub-bins), or None"""
@@ -131,10 +153,14 @@ class Leaf:
                 if checkPos(q2, nat_sub(len(nm[mm:]), 1), b0, b1, R):
                     self.stat['out'] += 1
                     return [(b1, sig, m, ('out', k, mm))]
-            hc, vc, lc = self.choose(Dp, X, Y, b0, b1)
-            if vertOk(self.D, self.W, sig, Dp, X, Y, b0, b1, R, self.chs, self.cvs, self.crs, hc, vc, lc):
-                self.stat['val'] += 1
-                return [(b1, sig, m, ('val', hc, vc, lc))]
+            for lam in ((1, 1), (1, 8), (1, 64)):
+                hc, vc, lc, ncomb = self.choose(Dp, X, Y, b0, b1, lam)
+                if ncomb <= 128 and vertOk(self.D, self.W, sig, Dp, X, Y, b0, b1, R, self.chs, self.cvs,
+                                           self.crs, self.hbx, self.vbx, hc, vc, lc):
+                    self.stat['val'] += 1
+                    return [(b1, sig, m, ('val', hc, vc, lc))]
+                if not any(mx[0] in ('zp', 'pl') or my[0] in ('zp', 'pl') for mx, my in lc):
+                    break
         if depth >= self.maxdepth or b1 - b0 < 2:
             return None
         mid = (b0 + b1) // 2
@@ -185,3 +211,65 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+
+# ---------------------------------------------------------------- Lean output
+def lpoly(p):
+    return "[" + ", ".join(str(c) for c in p) + "]"
+
+
+def lPL(P):
+    return f"({lpoly(P[0])}, {lpoly(P[1])}, {lpoly(P[2])})"
+
+
+def ltup(t):
+    return "(" + ", ".join(str(x) for x in t) + ")"
+
+
+def lnat(xs):
+    return "[" + ", ".join(str(x) for x in xs) + "]"
+
+
+def lsegc(o):
+    if o[0] == 'drop': return ".drop"
+    if o[0] == 'box': return ".box"
+    return f".alt {lnat(o[1])} {lnat(o[2])}"
+
+
+def lcap(m):
+    if m[0] in ('zero', 'par', 'lin'): return "." + m[0]
+    return f"(.{m[0]} {m[1]} {m[2]} {m[3]} {m[4]})"
+
+
+def lbx(b):
+    return f"({lnat(b[0])}, {lnat(b[1])})"
+
+
+def lsub(sb):
+    b1, sig, m, kind = sb
+    if kind[0] == 'out':
+        k = f".out {kind[1]} {kind[2]}"
+    else:
+        _, hc, vc, lc = kind
+        k = (".val ⟨[" + ", ".join(lsegc(o) for o in hc) + "], [" + ", ".join(lsegc(o) for o in vc) +
+             "], [" + ", ".join(f"({lcap(a)}, {lcap(b)})" for a, b in lc) + "]⟩")
+    return f"⟨{b1}, {'true' if sig else 'false'}, {m}, {k}⟩"
+
+
+def lcert(c):
+    if c == 'par':
+        return ".par"
+    return ".bins [" + ", ".join(lsub(sb) for sb in c) + "]"
+
+
+def to_lean(lf, name):
+    rows = ",\n    ".join("[" + ", ".join(lcert(c) for c in row) + "]" for row in lf.certs)
+    return (f"def {name} : ExLeaf where\n"
+            f"  wx := {'true' if lf.wx else 'false'}\n  wy := {'true' if lf.wy else 'false'}\n"
+            f"  chs := [{', '.join(ltup(e) for e in lf.chs)}]\n"
+            f"  cvs := [{', '.join(ltup(e) for e in lf.cvs)}]\n"
+            f"  crs := [{', '.join(ltup(r) for r in lf.crs)}]\n"
+            f"  Ls := [{', '.join(lPL(P) for P in lf.Ls)}]\n"
+            f"  hbx := [{', '.join(lbx(b) for b in lf.hbx)}]\n"
+            f"  vbx := [{', '.join(lbx(b) for b in lf.vbx)}]\n"
+            f"  certs := [\n    {rows}]\n")

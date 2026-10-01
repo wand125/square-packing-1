@@ -81,7 +81,8 @@ def subOk (D W R : ℕ) (side : List PL) (chs cvs : List SegE) (crs : List RectE
       let nm := (SL.atV ⟨S, 0, 0, 0, 1⟩ Δ X Y).num
       decide (k < side.length) && (nm.take m).all (· == 0) &&
         checkPos (sgn (!sb.σ) (nm.drop m)) ((nm.drop m).length - 1) b0 sb.b1 R
-    | .val c => vertOk D W sb.σ Δ X Y b0 sb.b1 R chs cvs crs hbx vbx c
+    | .val c => c.splits.all (fun sp => sp.q.d != 0) &&
+      vertOk D W sb.σ Δ X Y b0 sb.b1 R chs cvs crs hbx vbx c
 
 /-- A pair's certificate: parallel, or sub-bins covering `[U0, U1]` in order. -/
 inductive PairCert where
@@ -209,7 +210,8 @@ theorem pair_sound {D W R U0 U1 : ℕ} {side : List PL} {chs cvs : List SegE} {c
       linarith
     · rw [hsbk] at hk
       rw [hv']
-      exact vertOk_sound hcl.hD ctx hcl.hch hcl.hcv (by rw [← hv']; exact hbd v hv) hk
+      simp only [Bool.and_eq_true, List.all_eq_true, bne_iff_ne, ne_eq] at hk
+      exact vertOk_sound hcl.hD ctx hcl.hch hcl.hcv (by rw [← hv']; exact hbd v hv) hk.1 hk.2
 
 /-- **All pairs**: every pair `i < j` of the list has a passing certificate. -/
 lemma allPairs_sound {D W R U0 U1 : ℕ} {side : List PL} {chs cvs : List SegE} {crs : List RectE}
@@ -315,11 +317,42 @@ lemma eval_affRF (P : PL) {x y : RF} (hx : x.d ≠ 0) (hy : y.d ≠ 0) {u : ℝ}
     eval_mul ok (by simp) hy]
   simp [RF.eval, den, aff, evalPL]
 
+/-- A corner coordinate as a quotient of polynomials: `x/Q`, or the wall `(C + S)/(2N)`. -/
+def cnum (x : ℕ) (w : Bool) : Poly := if w then BernZ.add Cp Sp else [(x : ℤ)]
+def cden (Q : ℕ) (w : Bool) : Poly := if w then smul 2 Np else [(Q : ℤ)]
+
+lemma eval_cden_pos {Q : ℕ} (hQ : 0 < Q) (w : Bool) (u : ℝ) : 0 < eval (cden Q w) u := by
+  unfold cden; split_ifs
+  · rw [eval_smul, eval_Np]; push_cast; positivity
+  · simp; exact_mod_cast hQ
+
+lemma loX_eq {Q : ℕ} (hQ : 0 < Q) (x : ℕ) (w : Bool) (u : ℝ) :
+    (loX Q x w).eval 1 u = eval (cnum x w) u / eval (cden Q w) u := by
+  rw [eval_loX hQ]
+  unfold cnum cden; split_ifs
+  · rw [BernZ.eval_add, eval_Cp, eval_Sp, eval_smul, eval_Np]; push_cast; ring
+  · simp
+
+/-- `aff P (nx/dx, ny/dy) · dx · dy` as a polynomial. -/
+def cornerPoly (P : PL) (nx dx ny dy : Poly) : Poly :=
+  BernZ.add (BernZ.add (BernZ.mul P.1 (BernZ.mul nx dy)) (BernZ.mul P.2.1 (BernZ.mul ny dx)))
+    (BernZ.mul P.2.2 (BernZ.mul dx dy))
+
+lemma eval_cornerPoly (P : PL) (nx dx ny dy : Poly) (u : ℝ) (hx : eval dx u ≠ 0)
+    (hy : eval dy u ≠ 0) :
+    eval (cornerPoly P nx dx ny dy) u =
+      aff (evalPL P u) (eval nx u / eval dx u, eval ny u / eval dy u) * (eval dx u * eval dy u) := by
+  simp only [cornerPoly, BernZ.eval_add, BernZ.eval_mul, aff, evalPL]
+  field_simp
+
 /-- A form is `≥ 0` (`neg = false`) or `≤ 0` (`neg = true`) at the four corners of the region. -/
 def cornersOk (Q x0 x1 y0 y1 U0 U1 R : ℕ) (wx wy neg : Bool) (P : PL) : Bool :=
-  [(loX Q x0 wx, loX Q y0 wy), (loX Q x0 wx, RF.const y1 Q), (RF.const x1 Q, loX Q y0 wy),
-    (RF.const x1 Q, RF.const y1 Q)].all fun q =>
-    ckRF true (if neg then RF.neg (affRF P q.1 q.2) else affRF P q.1 q.2) U0 U1 R
+  [(cnum x0 wx, cden Q wx, cnum y0 wy, cden Q wy), (cnum x0 wx, cden Q wx, cnum y1 false, cden Q false),
+    (cnum x1 false, cden Q false, cnum y0 wy, cden Q wy),
+    (cnum x1 false, cden Q false, cnum y1 false, cden Q false)].all fun c =>
+    BernZ.check (if neg then smul (-1) (cornerPoly P c.1 c.2.1 c.2.2.1 c.2.2.2)
+      else cornerPoly P c.1 c.2.1 c.2.2.1 c.2.2.2)
+      ((cornerPoly P c.1 c.2.1 c.2.2.1 c.2.2.2).length - 1) U0 U1 R
 
 lemma affine_nonneg_rect {a b k xl xh yl yh x y : ℝ} (hx0 : xl ≤ x) (hx1 : x ≤ xh) (hy0 : yl ≤ y)
     (hy1 : y ≤ yh) (c00 : 0 ≤ a * xl + b * yl + k) (c01 : 0 ≤ a * xl + b * yh + k)
@@ -338,31 +371,32 @@ lemma corners_sound {Q x0 x1 y0 y1 U0 U1 R : ℕ} (hQ : 0 < Q) (hR : 0 < R) {wx 
       if neg then aff (evalPL P u) p ≤ 0 else 0 ≤ aff (evalPL P u) p := by
   intro p hp
   obtain ⟨hx0, hx1, hy0, hy1⟩ := mem_region hQ hp
-  have ok : Ok 1 u := ⟨hu0, hu1, one_ne_zero⟩
-  have dl : ∀ (z : ℕ) (w : Bool), (loX Q z w).d ≠ 0 := by
-    intro z w; unfold loX; split_ifs <;> simp [RF.const] <;> omega
-  have dc : ∀ z : ℕ, (RF.const z Q).d ≠ 0 := by intro z; simp [RF.const]; omega
-  have hcx : ∀ z : ℕ, (RF.const z Q).eval 1 u = (z : ℝ) / Q := by
-    intro z; rw [eval_const]; push_cast; rfl
+  rw [loX_eq hQ] at hx0 hy0
+  have hcq : ∀ z : ℕ, (z : ℝ) / Q = eval (cnum z false) u / eval (cden Q false) u := by
+    intro z; simp [cnum, cden]
+  rw [hcq] at hx1 hy1
   simp only [cornersOk, List.all_cons, List.all_nil, Bool.and_true, Bool.and_eq_true] at h
   obtain ⟨c1, c2, c3, c4⟩ := h
-  have val : ∀ (x y : RF), x.d ≠ 0 → y.d ≠ 0 →
-      ckRF true (if neg then RF.neg (affRF P x y) else affRF P x y) U0 U1 R = true →
-      if neg then aff (evalPL P u) (x.eval 1 u, y.eval 1 u) ≤ 0
-        else 0 ≤ aff (evalPL P u) (x.eval 1 u, y.eval 1 u) := by
-    intro x y hx hy hc
-    have hd : (if neg then RF.neg (affRF P x y) else affRF P x y).d ≠ 0 := by
-      split_ifs <;> simp [RF.neg, affRF_d P hx hy]
-    have h0 := nonneg_of_checkRF hc hR ok (by simp) hd hb0 hb1
+  have val : ∀ (nx dx ny dy : Poly), 0 < eval dx u → 0 < eval dy u →
+      BernZ.check (if neg then smul (-1) (cornerPoly P nx dx ny dy) else cornerPoly P nx dx ny dy)
+        ((cornerPoly P nx dx ny dy).length - 1) U0 U1 R = true →
+      if neg then aff (evalPL P u) (eval nx u / eval dx u, eval ny u / eval dy u) ≤ 0
+        else 0 ≤ aff (evalPL P u) (eval nx u / eval dx u, eval ny u / eval dy u) := by
+    intro nx dx ny dy hx hy hc
+    have h0 := BernZ.nonneg_of_check hc hR hb0 hb1
+    have hxy := mul_pos hx hy
     split_ifs at h0 ⊢
-    · rw [eval_neg, eval_affRF P hx hy hu0 hu1] at h0; linarith
-    · rwa [eval_affRF P hx hy hu0 hu1] at h0
-  have v1 := val _ _ (dl x0 wx) (dl y0 wy) c1
-  have v2 := val _ _ (dl x0 wx) (dc y1) c2
-  have v3 := val _ _ (dc x1) (dl y0 wy) c3
-  have v4 := val _ _ (dc x1) (dc y1) c4
-  rw [hcx] at v2 v3 v4
-  rw [hcx] at v4
+    · rw [eval_smul, eval_cornerPoly P nx dx ny dy u hx.ne' hy.ne'] at h0
+      push_cast at h0
+      by_contra hc'; push_neg at hc'
+      have := mul_pos hc' hxy; linarith
+    · rw [eval_cornerPoly P nx dx ny dy u hx.ne' hy.ne'] at h0
+      by_contra hc'; push_neg at hc'
+      have := mul_neg_of_neg_of_pos hc' hxy; linarith
+  have v1 := val _ _ _ _ (eval_cden_pos hQ wx u) (eval_cden_pos hQ wy u) c1
+  have v2 := val _ _ _ _ (eval_cden_pos hQ wx u) (eval_cden_pos hQ false u) c2
+  have v3 := val _ _ _ _ (eval_cden_pos hQ false u) (eval_cden_pos hQ wy u) c3
+  have v4 := val _ _ _ _ (eval_cden_pos hQ false u) (eval_cden_pos hQ false u) c4
   simp only [aff, evalPL] at v1 v2 v3 v4 ⊢
   split_ifs at v1 v2 v3 v4 ⊢
   · have := affine_nonneg_rect (a := -eval P.1 u) (b := -eval P.2.1 u) (k := -eval P.2.2 u)

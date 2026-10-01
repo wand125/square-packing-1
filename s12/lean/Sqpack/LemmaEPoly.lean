@@ -51,6 +51,7 @@ structure SL where
   j : ℕ
   k : ℕ
   d : ℕ
+  deriving DecidableEq
 
 /-- The positive denominator of a scaled line. -/
 noncomputable def sden (L : SL) (u : ℝ) : ℝ := (1 - u ^ 2) ^ L.i * (2 * u) ^ L.j * (1 + u ^ 2) ^ L.k * L.d

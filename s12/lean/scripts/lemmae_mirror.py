@@ -232,18 +232,6 @@ def segAlts(D, X, Y, w, Dn, ln, ups, los, Ua, La):
     return [segVal(D, X, Y, w, Dn, ln, ups, los, a, b) for a in Ua for b in La]
 
 
-def hAlts(D, X, Y, Dn, e, o):
-    if o is None:
-        return [rf_const(0, 1)]
-    return segAlts(D, X, Y, e[4], Dn, nat_sub(e[2], e[0]), hUps(Dn, e), hLos(Dn, e), o[0], o[1])
-
-
-def vAlts(D, X, Y, Dn, e, o):
-    if o is None:
-        return [rf_const(0, 1)]
-    return segAlts(D, X, Y, e[4], Dn, nat_sub(e[3], e[1]), vUps(Dn, e), vLos(Dn, e), o[0], o[1])
-
-
 def cprod(Ls):
     out = [[]]
     for l in reversed(Ls):
@@ -251,24 +239,162 @@ def cprod(Ls):
     return out
 
 
-def vertOk(Dn, W, sigma, D, X, Y, b0, b1, R, chs, cvs, crs, hc, vc, lc):
-    if len(hc) != len(chs) or len(vc) != len(cvs) or len(lc) != len(crs):
+# SegC: ('drop',) | ('box',) | ('alt', Ua, La)
+def segCAlts(D, X, Y, w, Dn, ln, ups, los, bx, sc):
+    if sc[0] == 'drop':
+        return [rf_const(0, 1)]
+    if sc[0] == 'box':
+        return segAlts(D, X, Y, w, Dn, ln, ups, los, bx[0], bx[1])
+    return segAlts(D, X, Y, w, Dn, ln, ups, los, sc[1], sc[2])
+
+
+def segCOk(sigma, D, X, Y, b0, b1, R, ups, los, bx, sc):
+    if sc[0] == 'drop':
+        return True
+    if sc[0] == 'box':
+        return bool(bx[0]) and bool(bx[1]) and all(a < len(ups) for a in bx[0]) and all(b < len(los) for b in bx[1])
+    return segOkA(sigma, D, X, Y, b0, b1, R, ups, los, sc[1], sc[2])
+
+
+def snum(sigma, r):
+    return r[0] if (sigma or r[1] % 2 == 0) else psmul(-1, r[0])
+
+
+def ptrim(p):
+    p = list(p)
+    while p and p[-1] == 0:
+        p.pop()
+    return p
+
+
+def peqb(p, q): return ptrim(p) == ptrim(q)
+
+
+def divHL(rg, fuel, rp):
+    out = []
+    while fuel > 0:
+        fuel -= 1
+        if len(rp) < len(rg) or not rp or not rg:
+            break
+        c = int(rp[0] / rg[0]) if False else _idiv(rp[0], rg[0])
+        out.append(c)
+        rg2 = rg + [0] * (len(rp) - len(rg))
+        rp = [x - c * y for x, y in zip(rp, rg2)][1:]
+    return out
+
+
+def _idiv(a, b):
+    # Lean's Int `/` is `Int.div` (T-division? no: Lean 4 `Int./` is `Int.div` = round toward zero? It is `Int.div` in core = ediv)
+    q = a // b
+    if b < 0 and q * b != a:
+        pass
+    # Lean 4 core: HDiv Int is Int.div (Euclidean `ediv`): remainder >= 0
+    r = a - b * q
+    if r < 0:
+        q += 1 if b < 0 else -1
+    return q if a - b * q >= 0 else q
+
+
+def pdiv(p, g):
+    tp = ptrim(p); tg = ptrim(g)
+    return list(reversed(divHL(list(reversed(tg)), len(tp), list(reversed(tp)))))
+
+
+def splitAt(splits, k):
+    return splits[k][0] if k < len(splits) else sl_cst(0, 1)
+
+
+def fcOk(sigma, D, X, Y, b0, b1, R, splits, pat, f, T):
+    k, G, g1, m = f
+    if not k < len(splits): return False
+    if not peqb(snum(sigma, atV(splitAt(splits, k), D, X, Y)), pmul(G, g1)): return False
+    if any(c != 0 for c in g1[:m]): return False
+    g1d = g1[m:]
+    if not checkPos(g1d, nat_sub(len(g1d), 1), b0, b1, R): return False
+    sT = snum(sigma, T)
+    c1 = pdiv(sT, G)
+    if not peqb(sT, pmul(G, c1)): return False
+    b = pat[k] if k < len(pat) else False
+    return check(c1 if b else psmul(-1, c1), nat_sub(len(c1), 1), b0, b1, R)
+
+
+def totOk(sigma, D, X, Y, b0, b1, R, splits, pat, fcs, T):
+    return ckRF(sigma, T, b0, b1, R) or any(fcOk(sigma, D, X, Y, b0, b1, R, splits, pat, f, T) for f in fcs)
+
+
+def tagOk(pat, t):
+    if t is None: return True
+    k, b = t
+    return (pat[k] if k < len(pat) else False) == b
+
+
+def pats(n):
+    out = [[]]
+    for _ in range(n):
+        out = [[b] + p for p in out for b in (False, True)]
+    return out
+
+
+def sproc(D, X, Y, sp, b):
+    q, nm, dm, np_, dp = sp
+    if b: return rf_neg(rf_mul(rf_const(np_, dp), atV(q, D, X, Y)))
+    return rf_mul(rf_const(nm, dm), atV(q, D, X, Y))
+
+
+# CapA: ('zeroC',) | ('zeroT', k) | ('par',) | ('linC',) | ('linT', k)
+def capTag(a):
+    if a[0] == 'zeroT': return (a[1], False)
+    if a[0] == 'linT': return (a[1], True)
+    return None
+
+
+def capAOk(sigma, D, X, Y, b0, b1, R, splits, cap, a):
+    if a[0] == 'zeroC': return ghOk(sigma, D, X, Y, b0, b1, R, cap, 0)
+    if a[0] == 'par': return True
+    if a[0] == 'linC': return ghOk(sigma, D, X, Y, b0, b1, R, cap, 2)
+    if a[0] == 'zeroT': return a[1] < len(splits) and splitAt(splits, a[1]) == cap
+    return a[1] < len(splits) and splitAt(splits, a[1]) == sl_sub(cap, sSL(1))
+
+
+def capAU(D, X, Y, cap, a):
+    return ghU(D, X, Y, cap, {'zeroC': 0, 'zeroT': 0, 'par': 1, 'linC': 2, 'linT': 2}[a[0]])
+
+
+def lebRF(D, X, Y, Dn, r, ax, ay):
+    return rf_mul(rf_const(r[4], 1), rf_add(D, rf_add(D, rf_const(1, 1), rf_neg(capAU(D, X, Y, capX(Dn, r[0]), ax))),
+                                          rf_neg(capAU(D, X, Y, capY(Dn, r[1]), ay))))
+
+
+def vertOk(Dn, W, sigma, D, X, Y, b0, b1, R, chs, cvs, crs, hbx, vbx, c):
+    splits, fcs, hc, vc, lc = c
+    if len(hbx) != len(chs) or len(vbx) != len(cvs) or len(hc) != len(chs) or len(vc) != len(cvs) or len(lc) != len(crs):
         return False
-    for e, o in zip(chs, hc):
-        if o is not None and not segOkA(sigma, D, X, Y, b0, b1, R, hUps(Dn, e), hLos(Dn, e), o[0], o[1]):
-            return False
-    for e, o in zip(cvs, vc):
-        if o is not None and not segOkA(sigma, D, X, Y, b0, b1, R, vUps(Dn, e), vLos(Dn, e), o[0], o[1]):
-            return False
-    for r, (mx, my) in zip(crs, lc):
-        if not (ghOk(sigma, D, X, Y, b0, b1, R, capX(Dn, r[0]), mx) and
-                ghOk(sigma, D, X, Y, b0, b1, R, capY(Dn, r[1]), my)):
-            return False
-    lebs = [lebVal(D, X, Y, Dn, r, mx, my) for r, (mx, my) in zip(crs, lc)]
-    alts = [hAlts(D, X, Y, Dn, e, o) for e, o in zip(chs, hc)] + [vAlts(D, X, Y, Dn, e, o) for e, o in zip(cvs, vc)]
-    for comb in cprod(alts):
-        if not ckRF(sigma, sumRF(D, comb + lebs + [rf_const(-W, 1)]), b0, b1, R):
-            return False
+    if not all(sp[2] != 0 and sp[4] != 0 for sp in splits): return False
+    for e, bx, l in zip(chs, hbx, hc):
+        if not all(segCOk(sigma, D, X, Y, b0, b1, R, hUps(Dn, e), hLos(Dn, e), bx, x[0]) for x in l): return False
+    for e, bx, l in zip(cvs, vbx, vc):
+        if not all(segCOk(sigma, D, X, Y, b0, b1, R, vUps(Dn, e), vLos(Dn, e), bx, x[0]) for x in l): return False
+    for r, (xs, ys) in zip(crs, lc):
+        if not all(capAOk(sigma, D, X, Y, b0, b1, R, splits, capX(Dn, r[0]), a) for a in xs): return False
+        if not all(capAOk(sigma, D, X, Y, b0, b1, R, splits, capY(Dn, r[1]), a) for a in ys): return False
+    for pat in pats(len(splits)):
+        if not all(any(tagOk(pat, x[1]) for x in l) for l in hc): return False
+        if not all(any(tagOk(pat, x[1]) for x in l) for l in vc): return False
+        if not all(any(tagOk(pat, capTag(a)) for a in xs) and any(tagOk(pat, capTag(a)) for a in ys) for xs, ys in lc): return False
+        alts = []
+        for e, bx, l in zip(chs, hbx, hc):
+            alts.append([t for x in l if tagOk(pat, x[1])
+                         for t in segCAlts(D, X, Y, e[4], Dn, nat_sub(e[2], e[0]), hUps(Dn, e), hLos(Dn, e), bx, x[0])])
+        for e, bx, l in zip(cvs, vbx, vc):
+            alts.append([t for x in l if tagOk(pat, x[1])
+                         for t in segCAlts(D, X, Y, e[4], Dn, nat_sub(e[3], e[1]), vUps(Dn, e), vLos(Dn, e), bx, x[0])])
+        for r, (xs, ys) in zip(crs, lc):
+            alts.append([lebRF(D, X, Y, Dn, r, ax, ay) for ax in xs if tagOk(pat, capTag(ax))
+                         for ay in ys if tagOk(pat, capTag(ay))])
+        sps = [sproc(D, X, Y, sp, b) for sp, b in zip(splits, pat)]
+        for comb in cprod(alts):
+            if not totOk(sigma, D, X, Y, b0, b1, R, splits, pat, fcs, sumRF(D, comb + sps + [rf_const(-W, 1)])):
+                return False
     return True
 
 
@@ -286,22 +412,21 @@ def sideL(Q, x0, x1, y0, y1, wx, wy):
             ([0], [-Q], [y1])]
 
 
-def loX(Q, x0, wx):
-    return (padd(Cp, Sp), 0, 0, 0, 1, 2) if wx else rf_const(x0, Q)
+def cnum(x, w): return padd(Cp, Sp) if w else [x]
+def cden(Q, w): return psmul(2, Np) if w else [Q]
 
 
-def affRF(P, x, y):
-    one = [1]
-    return rf_add(one, rf_add(one, rf_mul((P[0], 0, 0, 0, 0, 1), x), rf_mul((P[1], 0, 0, 0, 0, 1), y)),
-                  (P[2], 0, 0, 0, 0, 1))
+def cornerPoly(P, nx, dx, ny, dy):
+    return padd(padd(pmul(P[0], pmul(nx, dy)), pmul(P[1], pmul(ny, dx))), pmul(P[2], pmul(dx, dy)))
 
 
 def cornersOk(Q, x0, x1, y0, y1, U0, U1, R, wx, wy, neg, P):
-    cs = [(loX(Q, x0, wx), loX(Q, y0, wy)), (loX(Q, x0, wx), rf_const(y1, Q)),
-          (rf_const(x1, Q), loX(Q, y0, wy)), (rf_const(x1, Q), rf_const(y1, Q))]
-    for x, y in cs:
-        r = affRF(P, x, y)
-        if not ckRF(True, rf_neg(r) if neg else r, U0, U1, R):
+    cs = [(cnum(x0, wx), cden(Q, wx), cnum(y0, wy), cden(Q, wy)), (cnum(x0, wx), cden(Q, wx), cnum(y1, False), cden(Q, False)),
+          (cnum(x1, False), cden(Q, False), cnum(y0, wy), cden(Q, wy)),
+          (cnum(x1, False), cden(Q, False), cnum(y1, False), cden(Q, False))]
+    for c in cs:
+        p = cornerPoly(P, *c)
+        if not check(psmul(-1, p) if neg else p, nat_sub(len(p), 1), U0, U1, R):
             return False
     return True
 
@@ -325,3 +450,10 @@ def lebSLs(Dn, r):
 
 def widN(R, U0, U1): return nat_sub(R * R + 2 * U1 * R, U0 * U0)
 def widD(R, U0): return R * R + U0 * U0
+
+
+def boxDomOk(Q, x0, x1, y0, y1, U0, U1, R, wx, wy, ups, los, bx):
+    d0 = sl_cst(0, 1)
+    g = lambda l, a: l[a] if a < len(l) else d0
+    return all(any(cornersOk(Q, x0, x1, y0, y1, U0, U1, R, wx, wy, False, sl_sub(U, g(ups, a))[0]) for a in bx[0]) for U in ups) and \
+        all(any(cornersOk(Q, x0, x1, y0, y1, U0, U1, R, wx, wy, False, sl_sub(g(los, b), L)[0]) for b in bx[1]) for L in los)
