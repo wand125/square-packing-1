@@ -1,5 +1,6 @@
 import Sqpack.Basic
 import Sqpack.BernsteinZ
+import Sqpack.SquareArea
 import Sqpack.Chord
 import Sqpack.ZeroMargin
 import Sqpack.D4
