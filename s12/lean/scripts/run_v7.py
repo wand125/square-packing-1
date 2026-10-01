@@ -9,7 +9,7 @@ McCormick anchor, then without the corner kinds), and write `DIR/R%05d.lean`: th
 data and pair theorems, and the root theorem `root_%05d : CovT ...` at the global scale.  A status
 line per root goes to stdout (JSON).  Nothing here is trusted.
 """
-import argparse, json, os, signal, sys, time
+import argparse, json, os, pickle, signal, sys, time
 from fractions import Fraction as F
 from math import lcm
 from multiprocessing import Pool
@@ -92,6 +92,7 @@ def work(args):
     tree = build(root, leaves, F(7))
     g = Glue(D, SG, RG, W, MQ)
     body, fails, how = [], [], []
+    cert = {}
     for n, (_, b, k) in enumerate(leaves_of(tree)):
         if b[4] == b[5]:
             continue
@@ -105,20 +106,16 @@ def work(args):
             fails.append([n, k, [str(x) for x in b], why])
             continue
         name = f"r{idx:05d}l{n}"
-        body.append(G.to_lean_split(lf, name))
         g.leaf_names[b] = (f"{name}_ok", Sl, Rl)
+        cert[b] = dict(name=name, S=Sl, R=Rl, D=lf.D, W=lf.W, Q=lf.Q, box=lf.box, wx=lf.wx, wy=lf.wy,
+                       ex=lf.ex, ey=lf.ey, chs=lf.chs, cvs=lf.cvs, crs=lf.crs, Ls=lf.Ls, side=lf.side,
+                       hbx=lf.hbx, vbx=lf.vbx, certs=lf.certs)
     status = dict(root=idx, kinds=count(tree), fails=fails, how=how, sec=round(time.time() - t0, 1))
     if not fails:
-        mod = f"R{idx:05d}"
-        hdr = ["import Sqpack.V7.Data", "namespace SquarePacking.LemmaELeaf",
-               "open ZMTreeM LemmaEVert LemmaEPoly ZMTree", "set_option maxRecDepth 100000", "set_option maxHeartbeats 0"]
-        txt = "\n".join(hdr + body + [g.root_thm(f"root_{idx:05d}", root, tree, rects),
-                                      "end SquarePacking.LemmaELeaf"]) + "\n"
-        path = os.path.join(outdir, mod + ".lean")
-        with open(path + ".tmp", 'w') as f:
-            f.write(txt)
+        path = os.path.join(outdir, f"R{idx:05d}.pkl")
+        with open(path + ".tmp", 'wb') as f:
+            pickle.dump(dict(idx=idx, root=root, tree=tree, leaves=cert), f)
         os.replace(path + ".tmp", path)
-        status['bytes'] = len(txt)
     return status
 
 
@@ -158,12 +155,11 @@ def main():
     ap.add_argument('--lo', type=int, default=0)
     ap.add_argument('--hi', type=int, default=10 ** 9)
     ap.add_argument('--nproc', type=int, default=1)
-    ap.add_argument('--out', default=os.path.join(HERE, '..', 'Sqpack', 'V7'))
+    ap.add_argument('--out', default=os.path.join(HERE, '..', 'v7cert'))
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
-    data_module(a.out)
     jobs = [(i, r, l, a.out) for i, (r, l, u) in enumerate(load(LEAVES)) if a.lo <= i < a.hi
-            and not os.path.exists(os.path.join(a.out, f"R{i:05d}.lean"))]
+            and not os.path.exists(os.path.join(a.out, f"R{i:05d}.pkl"))]
     print(json.dumps(dict(todo=len(jobs))), flush=True)
     with Pool(a.nproc) as p:
         for st in p.imap_unordered(work, jobs):
