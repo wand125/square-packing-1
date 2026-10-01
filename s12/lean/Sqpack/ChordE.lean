@@ -185,6 +185,105 @@ lemma min3_sub_max3 (A B a b C D : ℝ) (Fs : List (ℝ × ℝ × ℝ)) (c : ℝ
     · exact clampMin_le_M _ Fs c
     · exact le_trans (clampMin_le _ Fs c F hFm) hle
 
+/-! ## 4.  The eight forms of a segment, and its captured part -/
+
+/-- `F − G` and the constant form. -/
+def subF (F G : ℝ × ℝ × ℝ) : ℝ × ℝ × ℝ := (F.1 - G.1, F.2.1 - G.2.1, F.2.2 - G.2.2)
+def constF (k : ℝ) : ℝ × ℝ × ℝ := (0, 0, k)
+
+@[simp] lemma aff_subF (F G : ℝ × ℝ × ℝ) (c : ℝ × ℝ) : aff (subF F G) c = aff F c - aff G c := by
+  simp only [aff, subF]; ring
+
+@[simp] lemma aff_constF (k : ℝ) (c : ℝ × ℝ) : aff (constF k) c = k := by simp [aff, constF]
+
+/-- The forms `up − lo` of a segment `[A, B]` on a line whose chord is `[max(lo₁, lo₂), min(up₁, up₂)]`
+(the pair `(B, A)` is the constant `M = B − A` of `clampMin`). -/
+def formsOf (A B : ℝ) (lo1 lo2 up1 up2 : ℝ × ℝ × ℝ) : List (ℝ × ℝ × ℝ) :=
+  [subF up1 (constF A), subF up2 (constF A), subF (constF B) lo1, subF (constF B) lo2,
+    subF up1 lo1, subF up1 lo2, subF up2 lo1, subF up2 lo2]
+
+lemma min_sub_max_formsOf (A B : ℝ) (lo1 lo2 up1 up2 : ℝ × ℝ × ℝ) (c : ℝ × ℝ) :
+    min B (min (aff up1 c) (aff up2 c)) - max A (max (aff lo1 c) (aff lo2 c)) =
+      clampMin (B - A) (formsOf A B lo1 lo2 up1 up2) c := by
+  apply min3_sub_max3
+  · intro F hF
+    simp only [formsOf, List.mem_cons, List.not_mem_nil, or_false] at hF
+    rcases hF with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl <;>
+      simp only [aff_subF, aff_constF, Set.mem_insert_iff, Set.mem_singleton_iff] <;>
+      first
+      | exact ⟨_, Or.inr (Or.inl rfl), _, Or.inl rfl, rfl⟩
+      | exact ⟨_, Or.inr (Or.inr rfl), _, Or.inl rfl, rfl⟩
+      | exact ⟨_, Or.inl rfl, _, Or.inr (Or.inl rfl), rfl⟩
+      | exact ⟨_, Or.inl rfl, _, Or.inr (Or.inr rfl), rfl⟩
+      | exact ⟨_, Or.inr (Or.inl rfl), _, Or.inr (Or.inl rfl), rfl⟩
+      | exact ⟨_, Or.inr (Or.inl rfl), _, Or.inr (Or.inr rfl), rfl⟩
+      | exact ⟨_, Or.inr (Or.inr rfl), _, Or.inr (Or.inl rfl), rfl⟩
+      | exact ⟨_, Or.inr (Or.inr rfl), _, Or.inr (Or.inr rfl), rfl⟩
+  · intro up hup lo hlo
+    simp only [Set.mem_insert_iff, Set.mem_singleton_iff] at hup hlo
+    simp only [formsOf, List.mem_cons, List.not_mem_nil, or_false, exists_eq_or_imp, exists_eq_left,
+      aff_subF, aff_constF]
+    rcases hup with rfl | rfl | rfl <;> rcases hlo with rfl | rfl | rfl <;> simp
+
+/-- The captured part `(e, plo, phi)` of a segment entry. -/
+noncomputable def partOf (e : SegE) (A B lo hi : ℝ) : SegE × ℝ × ℝ := (e, plo A B lo, phi A B lo hi)
+
+open ZMTreeM in
+/-- **A horizontal segment**: its part inside `Q(c)` is a valid part, of value
+`w · max(0, clampMin (B − A) forms c)/(B − A)`. -/
+theorem hseg_part {D : ℕ} (hD : 0 < D) (hs : 0 < Real.sin θ) (hc : 0 < Real.cos θ) (e : SegE)
+    (hy : e.2.1 = e.2.2.2.1) (hx : e.1 < e.2.2.1) (c : ℝ × ℝ)
+    (lo1 lo2 up1 up2 : ℝ × ℝ × ℝ)
+    (e1 : aff lo1 c = tA θ ((e.2.1 : ℝ) / D) c) (e2 : aff lo2 c = tB θ ((e.2.1 : ℝ) / D) c)
+    (e3 : aff up1 c = tC θ ((e.2.1 : ℝ) / D) c) (e4 : aff up2 c = tD θ ((e.2.1 : ℝ) / D) c) :
+    let A := (e.1 : ℝ) / D; let B := (e.2.2.1 : ℝ) / D
+    let p := partOf e A B (max (aff lo1 c) (aff lo2 c)) (min (aff up1 c) (aff up2 c))
+    PartOK D (sq c θ 1) p ∧
+      pval D p = (e.2.2.2.2 : ℝ) * max 0 (clampMin (B - A) (formsOf A B lo1 lo2 up1 up2) c) / (B - A) := by
+  intro A B p
+  have hDr : (0 : ℝ) < D := by exact_mod_cast hD
+  have hne : e.1 ≠ e.2.2.1 := ne_of_lt hx
+  have hAB : A ≤ B := div_le_div_of_nonneg_right (by exact_mod_cast hx.le) hDr.le
+  obtain ⟨p1, p2, p3, p4⟩ := plo_props (lo := max (aff lo1 c) (aff lo2 c))
+    (hi := min (aff up1 c) (aff up2 c)) hAB
+  refine ⟨⟨Or.inr ⟨hy, hx⟩, ?_, p2, ?_, fun t ht1 ht2 => ?_⟩, ?_⟩
+  · simp only [p, partOf, elo, hne, if_false]; exact p1
+  · simp only [p, partOf, ehi, hne, if_false]; exact p3
+  · obtain ⟨q1, q2⟩ := p4 t ht1 ht2
+    show lpE D e t ∈ sq c θ 1
+    rw [lpE, if_neg hne, mem_sq_iff_hchord hs hc, ← e1, ← e2, ← e3, ← e4]
+    exact ⟨q1, q2⟩
+  · simp only [p, partOf, pval, elo, ehi, hne, if_false, phi_sub_plo, ← min_sub_max_formsOf]
+    rfl
+
+open ZMTreeM in
+/-- **A vertical segment**: as `hseg_part`, the chord being the slice of `SquareArea.lean`. -/
+theorem vseg_part {D : ℕ} (hD : 0 < D) (hs : 0 < Real.sin θ) (hc : 0 < Real.cos θ) (e : SegE)
+    (hx : e.1 = e.2.2.1) (hy : e.2.1 < e.2.2.2.1) (c : ℝ × ℝ)
+    (lo1 lo2 up1 up2 : ℝ × ℝ × ℝ)
+    (e1 : aff lo1 c = SqArea.lowX c θ ((e.1 : ℝ) / D))
+    (e2 : aff lo2 c = SqArea.lowY c θ ((e.1 : ℝ) / D))
+    (e3 : aff up1 c = SqArea.upX c θ ((e.1 : ℝ) / D))
+    (e4 : aff up2 c = SqArea.upY c θ ((e.1 : ℝ) / D)) :
+    let A := (e.2.1 : ℝ) / D; let B := (e.2.2.2.1 : ℝ) / D
+    let p := partOf e A B (max (aff lo1 c) (aff lo2 c)) (min (aff up1 c) (aff up2 c))
+    PartOK D (sq c θ 1) p ∧
+      pval D p = (e.2.2.2.2 : ℝ) * max 0 (clampMin (B - A) (formsOf A B lo1 lo2 up1 up2) c) / (B - A) := by
+  intro A B p
+  have hDr : (0 : ℝ) < D := by exact_mod_cast hD
+  have hAB : A ≤ B := div_le_div_of_nonneg_right (by exact_mod_cast hy.le) hDr.le
+  obtain ⟨p1, p2, p3, p4⟩ := plo_props (lo := max (aff lo1 c) (aff lo2 c))
+    (hi := min (aff up1 c) (aff up2 c)) hAB
+  refine ⟨⟨Or.inl ⟨hx, hy⟩, ?_, p2, ?_, fun t ht1 ht2 => ?_⟩, ?_⟩
+  · simp only [p, partOf, elo, hx, if_true]; exact p1
+  · simp only [p, partOf, ehi, hx, if_true]; exact p3
+  · obtain ⟨q1, q2⟩ := p4 t ht1 ht2
+    show lpE D e t ∈ sq c θ 1
+    rw [lpE, if_pos hx, SqArea.mem_sq_iff_slice hs hc, ← e1, ← e2, ← e3, ← e4]
+    exact ⟨q1, q2⟩
+  · simp only [p, partOf, pval, elo, ehi, hx, if_true, phi_sub_plo, ← min_sub_max_formsOf]
+    rfl
+
 end ChordE
 
 end SquarePacking
