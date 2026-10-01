@@ -110,8 +110,10 @@ def work(args):
                "open ZMTreeM LemmaEVert LemmaEPoly ZMTree", "set_option maxRecDepth 100000"]
         txt = "\n".join(hdr + body + [g.root_thm(f"root_{idx:05d}", root, tree, rects),
                                       "end SquarePacking.LemmaELeaf"]) + "\n"
-        with open(os.path.join(outdir, mod + ".lean"), 'w') as f:
+        path = os.path.join(outdir, mod + ".lean")
+        with open(path + ".tmp", 'w') as f:
             f.write(txt)
+        os.replace(path + ".tmp", path)
         status['bytes'] = len(txt)
     return status
 
@@ -156,7 +158,9 @@ def main():
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
     data_module(a.out)
-    jobs = [(i, r, l, a.out) for i, (r, l, u) in enumerate(load(LEAVES)) if a.lo <= i < a.hi]
+    jobs = [(i, r, l, a.out) for i, (r, l, u) in enumerate(load(LEAVES)) if a.lo <= i < a.hi
+            and not os.path.exists(os.path.join(a.out, f"R{i:05d}.lean"))]
+    print(json.dumps(dict(todo=len(jobs))), flush=True)
     with Pool(a.nproc) as p:
         for st in p.imap_unordered(work, jobs):
             print(json.dumps(st), flush=True)
