@@ -3,15 +3,15 @@ import Sqpack.LebTan
 /-!
 # The corner of the Lebesgue square: inclusion–exclusion (`QUADRANT_EXACT.md` §4.4, E″)
 
-Near the corner `(a, a)` of the Lebesgue square `U`, the bound `1 − ĝ(d_x) − ĝ(d_y)` drops the area
-`A_LL = |Q ∩ {x < a, y < a}|`, which is not small.  Here:
+Near the corner `(a₁, a₂)` of the Lebesgue rectangle `U`, the bound `1 − ĝ(d_x) − ĝ(d_y)` drops the area
+`A_LL = |Q ∩ {x < a₁, y < a₂}|`, which is not small.  Here:
 
 * `area_ge_incl_excl`: `|Q ∩ U| ≥ 1 − cap_x − cap_y + A_LL` (exact inclusion–exclusion, when `Q`
   lies left of and below the far sides of `U`);
-* `corner3_ge`: in the frame at the lowest vertex, with `α = a − x_BL`, `β = a − y_BL`,
+* `corner3_ge`: in the frame at the lowest vertex, with `α = a₁ − x_BL`, `β = a₂ − y_BL`,
   `z = cβ − sα ≥ 0` and `0 ≤ α ≤ c`, `β ≤ c`, `cα + sβ ≤ 1`, `A_LL ≥ (2cαβ + s(β² − α²))/(2c)`;
-* `corner3_incl`: if instead `z ≤ 0` (and `α ≤ c`), `Q ∩ {y < a} ⊆ {x < a}`;
-* `xcut_ge`: in the frame at the leftmost vertex, with `α = a − x_TL ≤ s`, `β = a − y_TL ≤ 0`,
+* `corner3_incl`: if instead `z ≤ 0` (and `α ≤ c`), `Q ∩ {y < a₂} ⊆ {x < a₁}`;
+* `xcut_ge`: in the frame at the leftmost vertex, with `α = a₁ − x_TL ≤ s`, `β = a₂ − y_TL ≤ 0`,
   `z′ = cα + sβ ≥ 0`, `A_LL ≥ z′²/(2sc)`.
 
 Each lower bound is the area of a region between two graphs inside the square
@@ -58,27 +58,27 @@ lemma mem_ub {v : ℝ × ℝ} (h1 : -(1 / 2) < v.1) (h2 : v.1 < 1 / 2) (h3 : -(1
     (h4 : v.2 < 1 / 2) : v ∈ ub := by
   simp only [ub, mem_ofPred_eq, abs_le]; exact ⟨⟨h1.le, h2.le⟩, h3.le, h4.le⟩
 
-/-- **xcut**: frame at the leftmost vertex `TL`; `α = a − x_TL ≤ s`, `β = a − y_TL ≤ 0`,
-`z′ = cα + sβ ≥ 0`.  The part of the `x`-cap below `y = a` is a triangle of area `z′²/(2sc)`. -/
-theorem xcut_ge {c : ℝ × ℝ} {θ a : ℝ} (hs : 0 < Real.sin θ) (hc : 0 < Real.cos θ)
-    (hα : a - c.1 + (Real.cos θ + Real.sin θ) / 2 ≤ Real.sin θ)
-    (hβ : a - c.2 - (Real.cos θ - Real.sin θ) / 2 ≤ 0)
-    (hz : 0 ≤ Real.cos θ * (a - c.1 + (Real.cos θ + Real.sin θ) / 2) +
-      Real.sin θ * (a - c.2 - (Real.cos θ - Real.sin θ) / 2)) :
-    ENNReal.ofReal ((Real.cos θ * (a - c.1 + (Real.cos θ + Real.sin θ) / 2) +
-        Real.sin θ * (a - c.2 - (Real.cos θ - Real.sin θ) / 2)) ^ 2 /
+/-- **xcut**: frame at the leftmost vertex `TL`; `α = a₁ − x_TL ≤ s`, `β = a₂ − y_TL ≤ 0`,
+`z′ = cα + sβ ≥ 0`.  The part of the `x`-cap below `y = a₂` is a triangle of area `z′²/(2sc)`. -/
+theorem xcut_ge {c : ℝ × ℝ} {θ a1 a2 : ℝ} (hs : 0 < Real.sin θ) (hc : 0 < Real.cos θ)
+    (hα : a1 - c.1 + (Real.cos θ + Real.sin θ) / 2 ≤ Real.sin θ)
+    (hβ : a2 - c.2 - (Real.cos θ - Real.sin θ) / 2 ≤ 0)
+    (hz : 0 ≤ Real.cos θ * (a1 - c.1 + (Real.cos θ + Real.sin θ) / 2) +
+      Real.sin θ * (a2 - c.2 - (Real.cos θ - Real.sin θ) / 2)) :
+    ENNReal.ofReal ((Real.cos θ * (a1 - c.1 + (Real.cos θ + Real.sin θ) / 2) +
+        Real.sin θ * (a2 - c.2 - (Real.cos θ - Real.sin θ) / 2)) ^ 2 /
         (2 * Real.sin θ * Real.cos θ)) ≤
-      volume (sq c θ 1 ∩ ({p | p.1 < a} ∩ {p | p.2 < a})) := by
+      volume (sq c θ 1 ∩ ({p | p.1 < a1} ∩ {p | p.2 < a2})) := by
   set s := Real.sin θ with hsdef
   set co := Real.cos θ with hcdef
   have hsc : s ^ 2 + co ^ 2 = 1 := Real.sin_sq_add_cos_sq θ
-  set α := a - c.1 + (co + s) / 2 with hαdef
-  set β := a - c.2 - (co - s) / 2 with hβdef
+  set α := a1 - c.1 + (co + s) / 2 with hαdef
+  set β := a2 - c.2 - (co - s) / 2 with hβdef
   set z := co * α + s * β with hzdef
   have hscp : 0 < s * co := mul_pos hs hc
   have hz1 : z ≤ 1 := by nlinarith [sq_nonneg (s - co)]
   -- `η` between `(sξ − β)/c` and `(α − cξ)/s`, `ξ = v₁ + ½`, `v₂ = ½ − η`
-  have key := vol_ge_between (c := c) (θ := θ) (S := {p | p.1 < a} ∩ {p | p.2 < a})
+  have key := vol_ge_between (c := c) (θ := θ) (S := {p | p.1 < a1} ∩ {p | p.2 < a2})
     (l := -(1 / 2)) (h := z - 1 / 2) (by linarith)
     (f := fun x => 1 / 2 - (α - co * (x + 1 / 2)) / s)
     (g := fun x => 1 / 2 - (s * (x + 1 / 2) - β) / co) (by fun_prop) (by fun_prop)
@@ -94,12 +94,12 @@ theorem xcut_ge {c : ℝ × ℝ} {θ a : ℝ} (hs : 0 < Real.sin θ) (hc : 0 < R
         rw [div_le_one hs]; nlinarith
       have fη : 0 ≤ (s * (v.1 + 1 / 2) - β) / co := div_nonneg (by nlinarith) hc.le
       refine ⟨mem_ub hl (by linarith) (by linarith) (by linarith), ?_, ?_⟩
-      · show (pos c θ v).1 < a
+      · show (pos c θ v).1 < a1
         simp only [pos_apply]
         have : v.2 * s > (1 / 2 - (α - co * (v.1 + 1 / 2)) / s) * s := mul_lt_mul_of_pos_right hf hs
         rw [sub_mul, div_mul_cancel₀ _ hs.ne'] at this
         linarith
-      · show (pos c θ v).2 < a
+      · show (pos c θ v).2 < a2
         simp only [pos_apply]
         have : v.2 * co < (1 / 2 - (s * (v.1 + 1 / 2) - β) / co) * co := mul_lt_mul_of_pos_right hg hc
         rw [sub_mul, div_mul_cancel₀ _ hc.ne'] at this
@@ -111,26 +111,26 @@ theorem xcut_ge {c : ℝ × ℝ} {θ a : ℝ} (hs : 0 < Real.sin θ) (hc : 0 < R
   field_simp
   ring
 
-/-- **corner3**: frame at the lowest vertex `BL`; `α = a − x_BL ∈ [0, c]`, `β = a − y_BL ≤ c`,
+/-- **corner3**: frame at the lowest vertex `BL`; `α = a₁ − x_BL ∈ [0, c]`, `β = a₂ − y_BL ≤ c`,
 `z = cβ − sα ≥ 0`, `cα + sβ ≤ 1`.  Then `A_LL ≥ (2cαβ + s(β² − α²))/(2c)` (in fact equal). -/
-theorem corner3_ge {c : ℝ × ℝ} {θ a : ℝ} (hs : 0 < Real.sin θ) (hc : 0 < Real.cos θ)
-    (hα0 : 0 ≤ a - c.1 + (Real.cos θ - Real.sin θ) / 2)
-    (hα1 : a - c.1 + (Real.cos θ - Real.sin θ) / 2 ≤ Real.cos θ)
-    (hβ1 : a - c.2 + (Real.sin θ + Real.cos θ) / 2 ≤ Real.cos θ)
-    (hz : 0 ≤ Real.cos θ * (a - c.2 + (Real.sin θ + Real.cos θ) / 2) -
-      Real.sin θ * (a - c.1 + (Real.cos θ - Real.sin θ) / 2))
-    (hx : Real.cos θ * (a - c.1 + (Real.cos θ - Real.sin θ) / 2) +
-      Real.sin θ * (a - c.2 + (Real.sin θ + Real.cos θ) / 2) ≤ 1) :
-    ENNReal.ofReal ((2 * Real.cos θ * (a - c.1 + (Real.cos θ - Real.sin θ) / 2) *
-        (a - c.2 + (Real.sin θ + Real.cos θ) / 2) + Real.sin θ *
-        ((a - c.2 + (Real.sin θ + Real.cos θ) / 2) ^ 2 - (a - c.1 + (Real.cos θ - Real.sin θ) / 2) ^ 2)) /
+theorem corner3_ge {c : ℝ × ℝ} {θ a1 a2 : ℝ} (hs : 0 < Real.sin θ) (hc : 0 < Real.cos θ)
+    (hα0 : 0 ≤ a1 - c.1 + (Real.cos θ - Real.sin θ) / 2)
+    (hα1 : a1 - c.1 + (Real.cos θ - Real.sin θ) / 2 ≤ Real.cos θ)
+    (hβ1 : a2 - c.2 + (Real.sin θ + Real.cos θ) / 2 ≤ Real.cos θ)
+    (hz : 0 ≤ Real.cos θ * (a2 - c.2 + (Real.sin θ + Real.cos θ) / 2) -
+      Real.sin θ * (a1 - c.1 + (Real.cos θ - Real.sin θ) / 2))
+    (hx : Real.cos θ * (a1 - c.1 + (Real.cos θ - Real.sin θ) / 2) +
+      Real.sin θ * (a2 - c.2 + (Real.sin θ + Real.cos θ) / 2) ≤ 1) :
+    ENNReal.ofReal ((2 * Real.cos θ * (a1 - c.1 + (Real.cos θ - Real.sin θ) / 2) *
+        (a2 - c.2 + (Real.sin θ + Real.cos θ) / 2) + Real.sin θ *
+        ((a2 - c.2 + (Real.sin θ + Real.cos θ) / 2) ^ 2 - (a1 - c.1 + (Real.cos θ - Real.sin θ) / 2) ^ 2)) /
         (2 * Real.cos θ)) ≤
-      volume (sq c θ 1 ∩ ({p | p.1 < a} ∩ {p | p.2 < a})) := by
+      volume (sq c θ 1 ∩ ({p | p.1 < a1} ∩ {p | p.2 < a2})) := by
   set s := Real.sin θ with hsdef
   set co := Real.cos θ with hcdef
   have hsc : s ^ 2 + co ^ 2 = 1 := Real.sin_sq_add_cos_sq θ
-  set α := a - c.1 + (co - s) / 2 with hαdef
-  set β := a - c.2 + (s + co) / 2 with hβdef
+  set α := a1 - c.1 + (co - s) / 2 with hαdef
+  set β := a2 - c.2 + (s + co) / 2 with hβdef
   set xs := co * α + s * β with hxsdef
   have hscp : 0 < s * co := mul_pos hs hc
   have hm0 : 0 ≤ α / co := div_nonneg hα0 hc.le
@@ -139,7 +139,7 @@ theorem corner3_ge {c : ℝ × ℝ} {θ a : ℝ} (hs : 0 < Real.sin θ) (hc : 0 
   have hsb : s * xs ≤ β := by nlinarith
   set f : ℝ → ℝ := fun x => max (-(1 / 2)) ((co * (x + 1 / 2) - α) / s - 1 / 2) with hfdef
   set g : ℝ → ℝ := fun x => (β - s * (x + 1 / 2)) / co - 1 / 2 with hgdef
-  have key := vol_ge_between (c := c) (θ := θ) (S := {p | p.1 < a} ∩ {p | p.2 < a})
+  have key := vol_ge_between (c := c) (θ := θ) (S := {p | p.1 < a1} ∩ {p | p.2 < a2})
     (l := -(1 / 2)) (h := xs - 1 / 2) (by linarith) (f := f) (g := g) (by fun_prop) (by fun_prop)
     (fun x hx => by
       obtain ⟨h1, h2⟩ := hx
@@ -159,12 +159,12 @@ theorem corner3_ge {c : ℝ × ℝ} {θ a : ℝ} (hs : 0 < Real.sin θ) (hc : 0 
       have gη : (β - s * (v.1 + 1 / 2)) / co ≤ 1 := by
         rw [div_le_one hc]; nlinarith
       refine ⟨mem_ub hl (by linarith) hf1 (by linarith), ?_, ?_⟩
-      · show (pos c θ v).1 < a
+      · show (pos c θ v).1 < a1
         simp only [pos_apply]
         have : (co * (v.1 + 1 / 2) - α) / s < v.2 + 1 / 2 := by linarith
         rw [div_lt_iff₀ hs] at this
         linarith
-      · show (pos c θ v).2 < a
+      · show (pos c θ v).2 < a2
         simp only [pos_apply]
         have : v.2 + 1 / 2 < (β - s * (v.1 + 1 / 2)) / co := by linarith
         rw [lt_div_iff₀ hc] at this
@@ -208,11 +208,11 @@ theorem corner3_ge {c : ℝ × ℝ} {θ a : ℝ} (hs : 0 < Real.sin θ) (hc : 0 
   ring
 
 /-- **corner3, `z ≤ 0`**: the bottom cap lies left of `x = a`. -/
-theorem corner3_incl {c : ℝ × ℝ} {θ a : ℝ} (hs : 0 < Real.sin θ) (hc : 0 < Real.cos θ)
-    (hα1 : a - c.1 + (Real.cos θ - Real.sin θ) / 2 ≤ Real.cos θ)
-    (hz : Real.cos θ * (a - c.2 + (Real.sin θ + Real.cos θ) / 2) -
-      Real.sin θ * (a - c.1 + (Real.cos θ - Real.sin θ) / 2) ≤ 0) :
-    sq c θ 1 ∩ {p | p.2 < a} ⊆ {p | p.1 < a} := by
+theorem corner3_incl {c : ℝ × ℝ} {θ a1 a2 : ℝ} (hs : 0 < Real.sin θ) (hc : 0 < Real.cos θ)
+    (hα1 : a1 - c.1 + (Real.cos θ - Real.sin θ) / 2 ≤ Real.cos θ)
+    (hz : Real.cos θ * (a2 - c.2 + (Real.sin θ + Real.cos θ) / 2) -
+      Real.sin θ * (a1 - c.1 + (Real.cos θ - Real.sin θ) / 2) ≤ 0) :
+    sq c θ 1 ∩ {p | p.2 < a2} ⊆ {p | p.1 < a1} := by
   set s := Real.sin θ with hsdef
   set co := Real.cos θ with hcdef
   intro p ⟨hp, hy⟩
@@ -222,9 +222,9 @@ theorem corner3_incl {c : ℝ × ℝ} {θ a : ℝ} (hs : 0 < Real.sin θ) (hc : 
   rw [abs_le, abs_le] at hv
   simp only [mem_ofPred_eq, pos_apply] at hy ⊢
   -- `ξ = v₁ + ½ < β/s`, so `cξ − sη ≤ cξ < cβ/s ≤ α`
-  have h1 : s * (v.1 + 1 / 2) < a - c.2 + (s + co) / 2 := by nlinarith
-  have h2 : co * (v.1 + 1 / 2) * s < co * (a - c.2 + (s + co) / 2) := by nlinarith
-  have h3 : co * (v.1 + 1 / 2) < a - c.1 + (co - s) / 2 := by nlinarith
+  have h1 : s * (v.1 + 1 / 2) < a2 - c.2 + (s + co) / 2 := by nlinarith
+  have h2 : co * (v.1 + 1 / 2) * s < co * (a2 - c.2 + (s + co) / 2) := by nlinarith
+  have h3 : co * (v.1 + 1 / 2) < a1 - c.1 + (co - s) / 2 := by nlinarith
   nlinarith
 
 /-- **Inclusion–exclusion**: `|Q ∩ U| ≥ 1 − cap_x − cap_y + A_LL` when `Q` lies left of and below
@@ -269,29 +269,29 @@ theorem area_ge_incl_excl {c : ℝ × ℝ} {θ a1 b1 a2 b2 : ℝ}
 
 /-- **E″, corner3**: `min(1 − g_x − g_y + M, 1 − g_x) ≤ |Q ∩ U|` for cap bounds `g_x`, `g_y` and any
 `M ≤ quad(α, β)` (BL frame). -/
-theorem area_ge_corner3 {c : ℝ × ℝ} {θ a b1 b2 gx gy M : ℝ} (hs : 0 < Real.sin θ)
+theorem area_ge_corner3 {c : ℝ × ℝ} {θ a1 a2 b1 b2 gx gy M : ℝ} (hs : 0 < Real.sin θ)
     (hc : 0 < Real.cos θ) (hb : ∀ p ∈ sq c θ 1, p.1 ≤ b1 ∧ p.2 ≤ b2)
-    (hgx : volume (sq c θ 1 ∩ {p | p.1 < a}) ≤ ENNReal.ofReal gx)
-    (hgy : volume (sq c θ 1 ∩ {p | p.2 < a}) ≤ ENNReal.ofReal gy) (hgx0 : 0 ≤ gx) (hgy0 : 0 ≤ gy)
-    (hα0 : 0 ≤ a - c.1 + (Real.cos θ - Real.sin θ) / 2)
-    (hα1 : a - c.1 + (Real.cos θ - Real.sin θ) / 2 ≤ Real.cos θ)
-    (hβ1 : a - c.2 + (Real.sin θ + Real.cos θ) / 2 ≤ Real.cos θ)
-    (hx : Real.cos θ * (a - c.1 + (Real.cos θ - Real.sin θ) / 2) +
-      Real.sin θ * (a - c.2 + (Real.sin θ + Real.cos θ) / 2) ≤ 1)
-    (hM : M ≤ (2 * Real.cos θ * (a - c.1 + (Real.cos θ - Real.sin θ) / 2) *
-        (a - c.2 + (Real.sin θ + Real.cos θ) / 2) + Real.sin θ *
-        ((a - c.2 + (Real.sin θ + Real.cos θ) / 2) ^ 2 - (a - c.1 + (Real.cos θ - Real.sin θ) / 2) ^ 2)) /
+    (hgx : volume (sq c θ 1 ∩ {p | p.1 < a1}) ≤ ENNReal.ofReal gx)
+    (hgy : volume (sq c θ 1 ∩ {p | p.2 < a2}) ≤ ENNReal.ofReal gy) (hgx0 : 0 ≤ gx) (hgy0 : 0 ≤ gy)
+    (hα0 : 0 ≤ a1 - c.1 + (Real.cos θ - Real.sin θ) / 2)
+    (hα1 : a1 - c.1 + (Real.cos θ - Real.sin θ) / 2 ≤ Real.cos θ)
+    (hβ1 : a2 - c.2 + (Real.sin θ + Real.cos θ) / 2 ≤ Real.cos θ)
+    (hx : Real.cos θ * (a1 - c.1 + (Real.cos θ - Real.sin θ) / 2) +
+      Real.sin θ * (a2 - c.2 + (Real.sin θ + Real.cos θ) / 2) ≤ 1)
+    (hM : M ≤ (2 * Real.cos θ * (a1 - c.1 + (Real.cos θ - Real.sin θ) / 2) *
+        (a2 - c.2 + (Real.sin θ + Real.cos θ) / 2) + Real.sin θ *
+        ((a2 - c.2 + (Real.sin θ + Real.cos θ) / 2) ^ 2 - (a1 - c.1 + (Real.cos θ - Real.sin θ) / 2) ^ 2)) /
         (2 * Real.cos θ)) :
-    min (1 - gx - gy + M) (1 - gx) ≤ (volume (sq c θ 1 ∩ Icc a b1 ×ˢ Icc a b2)).toReal := by
-  have hie := area_ge_incl_excl (a1 := a) (a2 := a) hb
+    min (1 - gx - gy + M) (1 - gx) ≤ (volume (sq c θ 1 ∩ Icc a1 b1 ×ˢ Icc a2 b2)).toReal := by
+  have hie := area_ge_incl_excl (a1 := a1) (a2 := a2) hb
   have fin : ∀ T ⊆ sq c θ 1, volume T ≠ ⊤ := fun T hT =>
     ne_top_of_le_ne_top ENNReal.one_ne_top ((measure_mono hT).trans (volume_sq c θ).le)
   have tx := ENNReal.toReal_mono ENNReal.ofReal_ne_top hgx
   have ty := ENNReal.toReal_mono ENNReal.ofReal_ne_top hgy
   rw [ENNReal.toReal_ofReal hgx0] at tx
   rw [ENNReal.toReal_ofReal hgy0] at ty
-  rcases le_total 0 (Real.cos θ * (a - c.2 + (Real.sin θ + Real.cos θ) / 2) -
-      Real.sin θ * (a - c.1 + (Real.cos θ - Real.sin θ) / 2)) with hz | hz
+  rcases le_total 0 (Real.cos θ * (a2 - c.2 + (Real.sin θ + Real.cos θ) / 2) -
+      Real.sin θ * (a1 - c.1 + (Real.cos θ - Real.sin θ) / 2)) with hz | hz
   · have h := corner3_ge hs hc hα0 hα1 hβ1 hz hx
     have tq := ENNReal.toReal_mono (fin _ inter_subset_left) h
     rw [ENNReal.toReal_ofReal' ] at tq
@@ -299,7 +299,7 @@ theorem area_ge_corner3 {c : ℝ × ℝ} {θ a b1 b2 gx gy M : ℝ} (hs : 0 < Re
     have : M ≤ max _ 0 := le_trans hM (le_max_left _ _)
     linarith
   · have hsub := corner3_incl hs hc hα1 hz
-    have e : sq c θ 1 ∩ ({p : ℝ × ℝ | p.1 < a} ∩ {p | p.2 < a}) = sq c θ 1 ∩ {p | p.2 < a} := by
+    have e : sq c θ 1 ∩ ({p : ℝ × ℝ | p.1 < a1} ∩ {p | p.2 < a2}) = sq c θ 1 ∩ {p | p.2 < a2} := by
       ext p; constructor
       · rintro ⟨h1, -, h3⟩; exact ⟨h1, h3⟩
       · rintro ⟨h1, h3⟩; exact ⟨h1, hsub ⟨h1, h3⟩, h3⟩
@@ -308,46 +308,46 @@ theorem area_ge_corner3 {c : ℝ × ℝ} {θ a b1 b2 gx gy M : ℝ} (hs : 0 < Re
     linarith
 
 /-- **E″, xcut**: `min(1 − g_y + M, 1 − g_x − g_y) ≤ |Q ∩ U|` for any `M ≤ quad(α, β)` (TL frame,
-`α = a − x_TL ≤ s`, `β = a − y_TL ≤ 0`). -/
-theorem area_ge_xcut {c : ℝ × ℝ} {θ a b1 b2 gx gy M : ℝ} (hs : 0 < Real.sin θ)
+`α = a₁ − x_TL ≤ s`, `β = a₂ − y_TL ≤ 0`). -/
+theorem area_ge_xcut {c : ℝ × ℝ} {θ a1 a2 b1 b2 gx gy M : ℝ} (hs : 0 < Real.sin θ)
     (hc : 0 < Real.cos θ) (hb : ∀ p ∈ sq c θ 1, p.1 ≤ b1 ∧ p.2 ≤ b2)
-    (hgx : volume (sq c θ 1 ∩ {p | p.1 < a}) ≤ ENNReal.ofReal gx)
-    (hgy : volume (sq c θ 1 ∩ {p | p.2 < a}) ≤ ENNReal.ofReal gy) (hgx0 : 0 ≤ gx) (hgy0 : 0 ≤ gy)
-    (hα : a - c.1 + (Real.cos θ + Real.sin θ) / 2 ≤ Real.sin θ)
-    (hβ : a - c.2 - (Real.cos θ - Real.sin θ) / 2 ≤ 0)
-    (hM : M ≤ (2 * Real.cos θ * (a - c.1 + (Real.cos θ + Real.sin θ) / 2) *
-        (a - c.2 - (Real.cos θ - Real.sin θ) / 2) + Real.sin θ *
-        ((a - c.2 - (Real.cos θ - Real.sin θ) / 2) ^ 2 - (a - c.1 + (Real.cos θ + Real.sin θ) / 2) ^ 2)) /
+    (hgx : volume (sq c θ 1 ∩ {p | p.1 < a1}) ≤ ENNReal.ofReal gx)
+    (hgy : volume (sq c θ 1 ∩ {p | p.2 < a2}) ≤ ENNReal.ofReal gy) (hgx0 : 0 ≤ gx) (hgy0 : 0 ≤ gy)
+    (hα : a1 - c.1 + (Real.cos θ + Real.sin θ) / 2 ≤ Real.sin θ)
+    (hβ : a2 - c.2 - (Real.cos θ - Real.sin θ) / 2 ≤ 0)
+    (hM : M ≤ (2 * Real.cos θ * (a1 - c.1 + (Real.cos θ + Real.sin θ) / 2) *
+        (a2 - c.2 - (Real.cos θ - Real.sin θ) / 2) + Real.sin θ *
+        ((a2 - c.2 - (Real.cos θ - Real.sin θ) / 2) ^ 2 - (a1 - c.1 + (Real.cos θ + Real.sin θ) / 2) ^ 2)) /
         (2 * Real.cos θ)) :
-    min (1 - gy + M) (1 - gx - gy) ≤ (volume (sq c θ 1 ∩ Icc a b1 ×ˢ Icc a b2)).toReal := by
-  have hie := area_ge_incl_excl (a1 := a) (a2 := a) hb
+    min (1 - gy + M) (1 - gx - gy) ≤ (volume (sq c θ 1 ∩ Icc a1 b1 ×ˢ Icc a2 b2)).toReal := by
+  have hie := area_ge_incl_excl (a1 := a1) (a2 := a2) hb
   have fin : ∀ T ⊆ sq c θ 1, volume T ≠ ⊤ := fun T hT =>
     ne_top_of_le_ne_top ENNReal.one_ne_top ((measure_mono hT).trans (volume_sq c θ).le)
   have ty := ENNReal.toReal_mono ENNReal.ofReal_ne_top hgy
   rw [ENNReal.toReal_ofReal hgy0] at ty
-  have hI0 : 0 ≤ (volume (sq c θ 1 ∩ ({p : ℝ × ℝ | p.1 < a} ∩ {p | p.2 < a}))).toReal :=
+  have hI0 : 0 ≤ (volume (sq c θ 1 ∩ ({p : ℝ × ℝ | p.1 < a1} ∩ {p | p.2 < a2}))).toReal :=
     ENNReal.toReal_nonneg
   set s := Real.sin θ with hsdef
   set co := Real.cos θ with hcdef
   have hsc : s ^ 2 + co ^ 2 = 1 := Real.sin_sq_add_cos_sq θ
-  rcases le_total 0 (co * (a - c.1 + (co + s) / 2) + s * (a - c.2 - (co - s) / 2)) with hz | hz
+  rcases le_total 0 (co * (a1 - c.1 + (co + s) / 2) + s * (a2 - c.2 - (co - s) / 2)) with hz | hz
   · refine min_le_of_left_le ?_
     have h := xcut_ge hs hc hα hβ hz
     have tq := ENNReal.toReal_mono (fin _ inter_subset_left) h
     rw [ENNReal.toReal_ofReal (by positivity)] at tq
     -- the `x`-cap is the triangle: `cap_x ≤ α²/(2sc)`
-    have hα0 : 0 ≤ a - c.1 + (co + s) / 2 := by nlinarith
-    have hcx := cap_le_ghat (c := c) hs hc a
-    have ex : a - xmin c θ = a - c.1 + (co + s) / 2 := by simp only [xmin, hsdef, hcdef]; ring
+    have hα0 : 0 ≤ a1 - c.1 + (co + s) / 2 := by nlinarith
+    have hcx := cap_le_ghat (c := c) hs hc a1
+    have ex : a1 - xmin c θ = a1 - c.1 + (co + s) / 2 := by simp only [xmin, hsdef, hcdef]; ring
     rw [ex] at hcx
-    have gpar : ghat s co (a - c.1 + (co + s) / 2) ≤ (a - c.1 + (co + s) / 2) ^ 2 / (2 * s * co) := by
+    have gpar : ghat s co (a1 - c.1 + (co + s) / 2) ≤ (a1 - c.1 + (co + s) / 2) ^ 2 / (2 * s * co) := by
       unfold ghat; split_ifs <;> first | positivity | exact le_rfl | linarith
     have tx := ENNReal.toReal_mono ENNReal.ofReal_ne_top hcx
     rw [ENNReal.toReal_ofReal (ghat_nonneg hs hc)] at tx
-    have iden : -(a - c.1 + (co + s) / 2) ^ 2 / (2 * s * co) +
-        (co * (a - c.1 + (co + s) / 2) + s * (a - c.2 - (co - s) / 2)) ^ 2 / (2 * s * co) =
-        (2 * co * (a - c.1 + (co + s) / 2) * (a - c.2 - (co - s) / 2) + s *
-          ((a - c.2 - (co - s) / 2) ^ 2 - (a - c.1 + (co + s) / 2) ^ 2)) / (2 * co) := by
+    have iden : -(a1 - c.1 + (co + s) / 2) ^ 2 / (2 * s * co) +
+        (co * (a1 - c.1 + (co + s) / 2) + s * (a2 - c.2 - (co - s) / 2)) ^ 2 / (2 * s * co) =
+        (2 * co * (a1 - c.1 + (co + s) / 2) * (a2 - c.2 - (co - s) / 2) + s *
+          ((a2 - c.2 - (co - s) / 2) ^ 2 - (a1 - c.1 + (co + s) / 2) ^ 2)) / (2 * co) := by
       rw [← sub_eq_zero]
       have k : ∀ A B : ℝ, -A ^ 2 / (2 * s * co) + (co * A + s * B) ^ 2 / (2 * s * co) -
           (2 * co * A * B + s * (B ^ 2 - A ^ 2)) / (2 * co) = (s ^ 2 + co ^ 2 - 1) * (A ^ 2 / (2 * co * s)) := by
