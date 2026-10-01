@@ -75,7 +75,7 @@ def segVal (Δ X Y : Poly) (w D len : ℕ) (ups los : List SL) (iu il : ℕ) : R
 /-! ### Soundness of a segment's term -/
 
 /-- The data of a vertex on a sub-bin, as real numbers. -/
-structure VCtx (Δ X Y : Poly) (σ : Bool) (b0 b1 R : ℕ) (u δ : ℝ) : Prop where
+structure VCtx (ck : RF → Bool) (Δ X Y : Poly) (σ : Bool) (b0 b1 R : ℕ) (u δ : ℝ) : Prop where
   hR : 0 < R
   hu0 : 0 < u
   hu1 : u < 1
@@ -83,23 +83,31 @@ structure VCtx (Δ X Y : Poly) (σ : Bool) (b0 b1 R : ℕ) (u δ : ℝ) : Prop w
   hb1 : u ≤ (b1 : ℝ) / R
   hΔ : eval Δ u = δ
   hσ : if σ then 0 < δ else δ < 0
+  /-- the sign test is sound at this vertex -/
+  hck : ∀ r : RF, ck r = true → r.d ≠ 0 → 0 ≤ r.eval δ u
 
-lemma VCtx.ok {Δ X Y : Poly} {σ : Bool} {b0 b1 R : ℕ} {u δ : ℝ} (h : VCtx Δ X Y σ b0 b1 R u δ) :
+lemma VCtx.ok {ck : RF → Bool} {Δ X Y : Poly} {σ : Bool} {b0 b1 R : ℕ} {u δ : ℝ} (h : VCtx ck Δ X Y σ b0 b1 R u δ) :
     Ok δ u :=
   ⟨h.hu0, h.hu1, by have := h.hσ; split_ifs at this <;> [exact this.ne'; exact this.ne]⟩
 
 /-- The vertex. -/
 noncomputable def vtx (X Y : Poly) (δ u : ℝ) : ℝ × ℝ := (eval X u / δ, eval Y u / δ)
 
-lemma ckRF_sound {σ : Bool} {r : RF} {b0 b1 R : ℕ} (hc : ckRF σ r b0 b1 R = true)
-    {Δ X Y : Poly} {u δ : ℝ} (h : VCtx Δ X Y σ b0 b1 R u δ) (hd : r.d ≠ 0) : 0 ≤ r.eval δ u :=
-  nonneg_of_checkRF hc h.hR h.ok h.hσ hd h.hb0 h.hb1
+lemma ckRF_sound {ck : RF → Bool} {σ : Bool} {r : RF} {b0 b1 R : ℕ} (hc : ck r = true)
+    {Δ X Y : Poly} {u δ : ℝ} (h : VCtx ck Δ X Y σ b0 b1 R u δ) (hd : r.d ≠ 0) : 0 ≤ r.eval δ u :=
+  h.hck r hc hd
+
+/-- The Bernstein test of the numerator is sound at every vertex of the sub-bin. -/
+lemma ckRF_hck {σ : Bool} {b0 b1 R : ℕ} {u δ : ℝ} (hR : 0 < R) (h : Ok δ u)
+    (hσ : if σ then 0 < δ else δ < 0) (hb0 : (b0 : ℝ) / R ≤ u) (hb1 : u ≤ (b1 : ℝ) / R) :
+    ∀ r : RF, ckRF σ r b0 b1 R = true → r.d ≠ 0 → 0 ≤ r.eval δ u :=
+  fun _ hc hd => nonneg_of_checkRF hc hR h hσ hd hb0 hb1
 
 /-- If the chosen element is checked against all others (`U' − U ≥ 0` at the vertex), it is the
 least of their values. -/
-lemma le_of_all {σ : Bool} {Δ X Y : Poly} {b0 b1 R : ℕ} {u δ : ℝ} (h : VCtx Δ X Y σ b0 b1 R u δ)
+lemma le_of_all {ck : RF → Bool} {σ : Bool} {Δ X Y : Poly} {b0 b1 R : ℕ} {u δ : ℝ} (h : VCtx ck Δ X Y σ b0 b1 R u δ)
     {Ls : List SL} (hd : ∀ L ∈ Ls, L.d ≠ 0) {U : SL} (hU : U.d ≠ 0)
-    (hall : Ls.all (fun U' => ckRF σ ((U'.sub U).atV Δ X Y) b0 b1 R) = true) :
+    (hall : Ls.all (fun U' => ck ((U'.sub U).atV Δ X Y)) = true) :
     ∀ U' ∈ Ls, U.val u (vtx X Y δ u) ≤ U'.val u (vtx X Y δ u) := by
   intro U' hU'
   have hc := (List.all_eq_true.mp hall) U' hU'
@@ -107,9 +115,9 @@ lemma le_of_all {σ : Bool} {Δ X Y : Poly} {b0 b1 R : ℕ} {u δ : ℝ} (h : VC
   rw [eval_atV _ _ _ _ h.hΔ h.ok.hδ, val_sub _ _ (hd U' hU') hU h.hu0 h.hu1] at h0
   simpa [vtx] using h0
 
-lemma ge_of_all {σ : Bool} {Δ X Y : Poly} {b0 b1 R : ℕ} {u δ : ℝ} (h : VCtx Δ X Y σ b0 b1 R u δ)
+lemma ge_of_all {ck : RF → Bool} {σ : Bool} {Δ X Y : Poly} {b0 b1 R : ℕ} {u δ : ℝ} (h : VCtx ck Δ X Y σ b0 b1 R u δ)
     {Ls : List SL} (hd : ∀ L ∈ Ls, L.d ≠ 0) {U : SL} (hU : U.d ≠ 0)
-    (hall : Ls.all (fun L => ckRF σ ((U.sub L).atV Δ X Y) b0 b1 R) = true) :
+    (hall : Ls.all (fun L => ck ((U.sub L).atV Δ X Y)) = true) :
     ∀ L ∈ Ls, L.val u (vtx X Y δ u) ≤ U.val u (vtx X Y δ u) := by
   intro L hL
   have hc := (List.all_eq_true.mp hall) L hL
@@ -121,8 +129,8 @@ lemma getD_mem {α : Type*} {l : List α} {i : ℕ} (d : α) (h : i < l.length) 
   rw [List.getD_eq_getElem _ _ h]; exact List.getElem_mem h
 
 /-- **A horizontal segment's term** is at least its certified value. -/
-theorem hseg_core {D : ℕ} (hD : 0 < D) {σ : Bool} {Δ X Y : Poly} {b0 b1 R : ℕ} {u δ : ℝ}
-    (h : VCtx Δ X Y σ b0 b1 R u δ) {e : SegE} (hx : e.1 < e.2.2.1) {U L : SL}
+theorem hseg_core {ck : RF → Bool} {D : ℕ} (hD : 0 < D) {σ : Bool} {Δ X Y : Poly} {b0 b1 R : ℕ} {u δ : ℝ}
+    (h : VCtx ck Δ X Y σ b0 b1 R u δ) {e : SegE} (hx : e.1 < e.2.2.1) {U L : SL}
     (hUm : U ∈ hUps D e) (hLm : L ∈ hLos D e)
     (u1 : ∀ U' ∈ hUps D e, U.val u (vtx X Y δ u) ≤ U'.val u (vtx X Y δ u))
     (l1 : ∀ L' ∈ hLos D e, L'.val u (vtx X Y δ u) ≤ L.val u (vtx X Y δ u)) :
@@ -184,8 +192,8 @@ theorem hseg_core {D : ℕ} (hD : 0 < D) {σ : Bool} {Δ X Y : Poly} {b0 b1 R : 
   exact le_trans (by linarith) (le_max_right _ _)
 
 /-- **A vertical segment's term** is at least its certified value. -/
-theorem vseg_core {D : ℕ} (hD : 0 < D) {σ : Bool} {Δ X Y : Poly} {b0 b1 R : ℕ} {u δ : ℝ}
-    (h : VCtx Δ X Y σ b0 b1 R u δ) {e : SegE} (hx : e.2.1 < e.2.2.2.1) {U L : SL}
+theorem vseg_core {ck : RF → Bool} {D : ℕ} (hD : 0 < D) {σ : Bool} {Δ X Y : Poly} {b0 b1 R : ℕ} {u δ : ℝ}
+    (h : VCtx ck Δ X Y σ b0 b1 R u δ) {e : SegE} (hx : e.2.1 < e.2.2.2.1) {U L : SL}
     (hUm : U ∈ vUps D e) (hLm : L ∈ vLos D e)
     (u1 : ∀ U' ∈ vUps D e, U.val u (vtx X Y δ u) ≤ U'.val u (vtx X Y δ u))
     (l1 : ∀ L' ∈ vLos D e, L'.val u (vtx X Y δ u) ≤ L.val u (vtx X Y δ u)) :
@@ -269,10 +277,10 @@ lemma val_cSL {h : ℕ} (hh : h ≠ 0) (u : ℝ) (c : ℝ × ℝ) :
   simp [div_div]
 
 /-- The test of a cap mode: `0`: `d ≤ 0`; `1`: none (parabola); `2`: `d ≥ s`. -/
-def ghOk (σ : Bool) (Δ X Y : Poly) (b0 b1 R : ℕ) (cap : SL) (mode : ℕ) : Bool :=
-  if mode = 0 then ckRF σ (((SL.cst 0 1).sub cap).atV Δ X Y) b0 b1 R
+def ghOk (ck : RF → Bool) (σ : Bool) (Δ X Y : Poly) (b0 b1 R : ℕ) (cap : SL) (mode : ℕ) : Bool :=
+  if mode = 0 then ck (((SL.cst 0 1).sub cap).atV Δ X Y)
   else if mode = 1 then true
-  else ckRF σ ((cap.sub (sSL 1)).atV Δ X Y) b0 b1 R
+  else ck ((cap.sub (sSL 1)).atV Δ X Y)
 
 /-- The upper bound of `ĝ(d)` of a cap mode: `0`, `d² N²/(2 S C)`, `(d − s/2) N / C`. -/
 def ghU (Δ X Y : Poly) (cap : SL) (mode : ℕ) : RF :=
@@ -291,8 +299,8 @@ lemma ghat_le_par {s co d : ℝ} (hs : 0 < s) (hc : 0 < co) : SqArea.ghat s co d
   · rw [div_le_div_iff₀ hc (by positivity)]
     nlinarith [sq_nonneg (d - s)]
 
-lemma ghU_sound {σ : Bool} {Δ X Y : Poly} {b0 b1 R : ℕ} {u δ : ℝ} (h : VCtx Δ X Y σ b0 b1 R u δ)
-    {cap : SL} (hcap : cap.d ≠ 0) {mode : ℕ} (hok : ghOk σ Δ X Y b0 b1 R cap mode = true) :
+lemma ghU_sound {ck : RF → Bool} {σ : Bool} {Δ X Y : Poly} {b0 b1 R : ℕ} {u δ : ℝ} (h : VCtx ck Δ X Y σ b0 b1 R u δ)
+    {cap : SL} (hcap : cap.d ≠ 0) {mode : ℕ} (hok : ghOk ck σ Δ X Y b0 b1 R cap mode = true) :
     SqArea.ghat (Real.sin (2 * Real.arctan u)) (Real.cos (2 * Real.arctan u))
         (cap.val u (vtx X Y δ u)) ≤ (ghU Δ X Y cap mode).eval δ u := by
   have hN : (0 : ℝ) < 1 + u ^ 2 := by positivity
@@ -346,14 +354,14 @@ lemma ghU_sound {σ : Bool} {Δ X Y : Poly} {b0 b1 R : ℕ} {u δ : ℝ} (h : VC
 
 /-! ### Pointwise bounds of `ĝ` -/
 
-lemma ghat_le_parU {σ : Bool} {Δ X Y : Poly} {b0 b1 R : ℕ} {u δ : ℝ} (h : VCtx Δ X Y σ b0 b1 R u δ)
+lemma ghat_le_parU {ck : RF → Bool} {σ : Bool} {Δ X Y : Poly} {b0 b1 R : ℕ} {u δ : ℝ} (h : VCtx ck Δ X Y σ b0 b1 R u δ)
     {cap : SL} (hcap : cap.d ≠ 0) :
     SqArea.ghat (Real.sin (2 * Real.arctan u)) (Real.cos (2 * Real.arctan u))
         (cap.val u (vtx X Y δ u)) ≤ (ghU Δ X Y cap 1).eval δ u := by
-  have ok : ghOk σ Δ X Y b0 b1 R cap 1 = true := by simp [ghOk]
+  have ok : ghOk ck σ Δ X Y b0 b1 R cap 1 = true := by simp [ghOk]
   exact ghU_sound h hcap ok
 
-lemma ghat_le_linU {σ : Bool} {Δ X Y : Poly} {b0 b1 R : ℕ} {u δ : ℝ} (h : VCtx Δ X Y σ b0 b1 R u δ)
+lemma ghat_le_linU {ck : RF → Bool} {σ : Bool} {Δ X Y : Poly} {b0 b1 R : ℕ} {u δ : ℝ} (h : VCtx ck Δ X Y σ b0 b1 R u δ)
     {cap : SL} (hcap : cap.d ≠ 0) (hds : 2 * u / (1 + u ^ 2) ≤ cap.val u (vtx X Y δ u)) :
     SqArea.ghat (Real.sin (2 * Real.arctan u)) (Real.cos (2 * Real.arctan u))
         (cap.val u (vtx X Y δ u)) ≤ (ghU Δ X Y cap 2).eval δ u := by
@@ -396,10 +404,10 @@ inductive CapM where
   | zp (n0 d0 n1 d1 : ℕ)
   | pl (n0 d0 n1 d1 : ℕ)
 
-def capOk (σ : Bool) (Δ X Y : Poly) (b0 b1 R : ℕ) (cap : SL) : CapM → Bool
-  | .zero => ghOk σ Δ X Y b0 b1 R cap 0
+def capOk (ck : RF → Bool) (σ : Bool) (Δ X Y : Poly) (b0 b1 R : ℕ) (cap : SL) : CapM → Bool
+  | .zero => ghOk ck σ Δ X Y b0 b1 R cap 0
   | .par => true
-  | .lin => ghOk σ Δ X Y b0 b1 R cap 2
+  | .lin => ghOk ck σ Δ X Y b0 b1 R cap 2
   | .zp _ d0 _ d1 => d0 != 0 && d1 != 0
   | .pl _ d0 _ d1 => d0 != 0 && d1 != 0
 
@@ -412,8 +420,8 @@ def capAlts (Δ X Y : Poly) (cap : SL) : CapM → List RF
   | .pl n0 d0 n1 d1 => [RF.add Δ (ghU Δ X Y cap 1) (RF.mul (RF.const n0 d0) (((sSL 1).sub cap).atV Δ X Y)),
       RF.add Δ (ghU Δ X Y cap 2) (RF.mul (RF.const n1 d1) ((cap.sub (sSL 1)).atV Δ X Y))]
 
-lemma capAlts_d (Δ X Y : Poly) {cap : SL} (hcap : cap.d ≠ 0) {m : CapM} (σ : Bool) (b0 b1 R : ℕ)
-    (hok : capOk σ Δ X Y b0 b1 R cap m = true) : ∀ r ∈ capAlts Δ X Y cap m, r.d ≠ 0 := by
+lemma capAlts_d {ck : RF → Bool} (Δ X Y : Poly) {cap : SL} (hcap : cap.d ≠ 0) {m : CapM} (σ : Bool) (b0 b1 R : ℕ)
+    (hok : capOk ck σ Δ X Y b0 b1 R cap m = true) : ∀ r ∈ capAlts Δ X Y cap m, r.d ≠ 0 := by
   have g0 := ghU_d Δ X Y cap hcap 0
   have g1 := ghU_d Δ X Y cap hcap 1
   have g2 := ghU_d Δ X Y cap hcap 2
@@ -436,9 +444,9 @@ lemma capAlts_d (Δ X Y : Poly) {cap : SL} (hcap : cap.d ≠ 0) {m : CapM} (σ :
     · exact RF.add_d _ g2 (by simp [RF.mul, RF.const, SL.atV, SL.sub, sSL, hok.2, hcap])
 
 /-- **A cap**: some alternative bounds `ĝ(d)` from above at `u`. -/
-theorem capAlts_sound {σ : Bool} {Δ X Y : Poly} {b0 b1 R : ℕ} {u δ : ℝ}
-    (h : VCtx Δ X Y σ b0 b1 R u δ) {cap : SL} (hcap : cap.d ≠ 0) {m : CapM}
-    (hok : capOk σ Δ X Y b0 b1 R cap m = true) :
+theorem capAlts_sound {ck : RF → Bool} {σ : Bool} {Δ X Y : Poly} {b0 b1 R : ℕ} {u δ : ℝ}
+    (h : VCtx ck Δ X Y σ b0 b1 R u δ) {cap : SL} (hcap : cap.d ≠ 0) {m : CapM}
+    (hok : capOk ck σ Δ X Y b0 b1 R cap m = true) :
     ∃ t ∈ capAlts Δ X Y cap m, SqArea.ghat (Real.sin (2 * Real.arctan u))
       (Real.cos (2 * Real.arctan u)) (cap.val u (vtx X Y δ u)) ≤ t.eval δ u := by
   set d := cap.val u (vtx X Y δ u)
@@ -522,10 +530,10 @@ lemma eval_sumRF {Δ : Poly} {δ u : ℝ} (h : Ok δ u) (hΔ : eval Δ u = δ) :
 
 /-- The test of a segment's alternatives `Ua`, `La` (indices into the candidate upper and lower
 ends): every candidate upper end is `≥` one in `Ua`, every lower end `≤` one in `La`. -/
-def segOkA (σ : Bool) (Δ X Y : Poly) (b0 b1 R : ℕ) (ups los : List SL) (Ua La : List ℕ) : Bool :=
+def segOkA (ck : RF → Bool) (σ : Bool) (Δ X Y : Poly) (b0 b1 R : ℕ) (ups los : List SL) (Ua La : List ℕ) : Bool :=
   !Ua.isEmpty && !La.isEmpty && Ua.all (· < ups.length) && La.all (· < los.length) &&
-    ups.all (fun U => Ua.any fun a => ckRF σ ((U.sub (ups.getD a (SL.cst 0 1))).atV Δ X Y) b0 b1 R) &&
-    los.all (fun L => La.any fun b => ckRF σ (((los.getD b (SL.cst 0 1)).sub L).atV Δ X Y) b0 b1 R)
+    ups.all (fun U => Ua.any fun a => ck ((U.sub (ups.getD a (SL.cst 0 1))).atV Δ X Y)) &&
+    los.all (fun L => La.any fun b => ck (((los.getD b (SL.cst 0 1)).sub L).atV Δ X Y))
 
 /-- The values of a segment's alternatives `κ (up_a − lo_b)`. -/
 def segAlts (Δ X Y : Poly) (w D len : ℕ) (ups los : List SL) (Ua La : List ℕ) : List RF :=
@@ -537,11 +545,11 @@ def DomU (u : ℝ) (v : ℝ × ℝ) (ups : List SL) (Ua : List ℕ) : Prop :=
 def DomL (u : ℝ) (v : ℝ × ℝ) (los : List SL) (La : List ℕ) : Prop :=
   ∀ L ∈ los, ∃ b ∈ La, L.val u v ≤ (los.getD b (SL.cst 0 1)).val u v
 
-lemma domU_of_check {σ : Bool} {Δ X Y : Poly} {b0 b1 R : ℕ} {u δ : ℝ}
-    (h : VCtx Δ X Y σ b0 b1 R u δ) {ups : List SL} (hd : ∀ L ∈ ups, L.d ≠ 0) {Ua : List ℕ}
+lemma domU_of_check {ck : RF → Bool} {σ : Bool} {Δ X Y : Poly} {b0 b1 R : ℕ} {u δ : ℝ}
+    (h : VCtx ck Δ X Y σ b0 b1 R u δ) {ups : List SL} (hd : ∀ L ∈ ups, L.d ≠ 0) {Ua : List ℕ}
     (hlt : ∀ a ∈ Ua, a < ups.length)
     (hall : ups.all (fun U => Ua.any fun a =>
-      ckRF σ ((U.sub (ups.getD a (SL.cst 0 1))).atV Δ X Y) b0 b1 R) = true) :
+      ck ((U.sub (ups.getD a (SL.cst 0 1))).atV Δ X Y)) = true) :
     DomU u (vtx X Y δ u) ups Ua := by
   intro U hU
   obtain ⟨b, hb, hc⟩ := List.any_eq_true.mp ((List.all_eq_true.mp hall) U hU)
@@ -550,11 +558,11 @@ lemma domU_of_check {σ : Bool} {Δ X Y : Poly} {b0 b1 R : ℕ} {u δ : ℝ}
   rw [eval_atV _ _ _ _ h.hΔ h.ok.hδ, val_sub _ _ (hd U hU) (hd _ hbm) h.hu0 h.hu1] at h0
   exact ⟨b, hb, by simp only [vtx] at h0 ⊢; linarith⟩
 
-lemma domL_of_check {σ : Bool} {Δ X Y : Poly} {b0 b1 R : ℕ} {u δ : ℝ}
-    (h : VCtx Δ X Y σ b0 b1 R u δ) {los : List SL} (hd : ∀ L ∈ los, L.d ≠ 0) {La : List ℕ}
+lemma domL_of_check {ck : RF → Bool} {σ : Bool} {Δ X Y : Poly} {b0 b1 R : ℕ} {u δ : ℝ}
+    (h : VCtx ck Δ X Y σ b0 b1 R u δ) {los : List SL} (hd : ∀ L ∈ los, L.d ≠ 0) {La : List ℕ}
     (hlt : ∀ a ∈ La, a < los.length)
     (hall : los.all (fun L => La.any fun b =>
-      ckRF σ (((los.getD b (SL.cst 0 1)).sub L).atV Δ X Y) b0 b1 R) = true) :
+      ck (((los.getD b (SL.cst 0 1)).sub L).atV Δ X Y)) = true) :
     DomL u (vtx X Y δ u) los La := by
   intro L hL
   obtain ⟨b, hb, hc⟩ := List.any_eq_true.mp ((List.all_eq_true.mp hall) L hL)
@@ -597,8 +605,8 @@ lemma hd_vLos {D : ℕ} (hD : 0 < D) (e : SegE) : ∀ L ∈ vLos D e, L.d ≠ 0 
   rcases hL with rfl | rfl | rfl <;> simp [SL.cst, vLXs, vLYs] <;> omega
 
 /-- **A horizontal segment's term** is at least one of its alternatives, under dominance. -/
-theorem hseg_dom {D : ℕ} (hD : 0 < D) {σ : Bool} {Δ X Y : Poly} {b0 b1 R : ℕ} {u δ : ℝ}
-    (h : VCtx Δ X Y σ b0 b1 R u δ) {e : SegE} (hx : e.1 < e.2.2.1) {Ua La : List ℕ}
+theorem hseg_dom {ck : RF → Bool} {D : ℕ} (hD : 0 < D) {σ : Bool} {Δ X Y : Poly} {b0 b1 R : ℕ} {u δ : ℝ}
+    (h : VCtx ck Δ X Y σ b0 b1 R u δ) {e : SegE} (hx : e.1 < e.2.2.1) {Ua La : List ℕ}
     (hUa : Ua ≠ []) (hLa : La ≠ []) (hlu : ∀ a ∈ Ua, a < (hUps D e).length)
     (hll : ∀ b ∈ La, b < (hLos D e).length) (du : DomU u (vtx X Y δ u) (hUps D e) Ua)
     (dl : DomL u (vtx X Y δ u) (hLos D e) La) :
@@ -611,8 +619,8 @@ theorem hseg_dom {D : ℕ} (hD : 0 < D) {σ : Bool} {Δ X Y : Poly} {b0 b1 R : �
   refine ⟨_, List.mem_flatMap.mpr ⟨a, ha, List.mem_map.mpr ⟨b, hb, rfl⟩⟩, ?_⟩
   exact hseg_core hD h hx (getD_mem _ (hlu a ha)) (getD_mem _ (hll b hb)) hamin hbmax
 
-theorem vseg_dom {D : ℕ} (hD : 0 < D) {σ : Bool} {Δ X Y : Poly} {b0 b1 R : ℕ} {u δ : ℝ}
-    (h : VCtx Δ X Y σ b0 b1 R u δ) {e : SegE} (hx : e.2.1 < e.2.2.2.1) {Ua La : List ℕ}
+theorem vseg_dom {ck : RF → Bool} {D : ℕ} (hD : 0 < D) {σ : Bool} {Δ X Y : Poly} {b0 b1 R : ℕ} {u δ : ℝ}
+    (h : VCtx ck Δ X Y σ b0 b1 R u δ) {e : SegE} (hx : e.2.1 < e.2.2.2.1) {Ua La : List ℕ}
     (hUa : Ua ≠ []) (hLa : La ≠ []) (hlu : ∀ a ∈ Ua, a < (vUps D e).length)
     (hll : ∀ b ∈ La, b < (vLos D e).length) (du : DomU u (vtx X Y δ u) (vUps D e) Ua)
     (dl : DomL u (vtx X Y δ u) (vLos D e) La) :
@@ -719,11 +727,11 @@ def segCAlts (Δ X Y : Poly) (w D len : ℕ) (ups los : List SL) (bx : List ℕ 
   | .box => segAlts Δ X Y w D len ups los bx.1 bx.2
   | .alt Ua La => segAlts Δ X Y w D len ups los Ua La
 
-def segCOk (σ : Bool) (Δ X Y : Poly) (b0 b1 R : ℕ) (ups los : List SL) (bx : List ℕ × List ℕ) :
+def segCOk (ck : RF → Bool) (σ : Bool) (Δ X Y : Poly) (b0 b1 R : ℕ) (ups los : List SL) (bx : List ℕ × List ℕ) :
     SegC → Bool
   | .drop => true
   | .box => !bx.1.isEmpty && !bx.2.isEmpty && bx.1.all (· < ups.length) && bx.2.all (· < los.length)
-  | .alt Ua La => segOkA σ Δ X Y b0 b1 R ups los Ua La
+  | .alt Ua La => segOkA ck σ Δ X Y b0 b1 R ups los Ua La
 
 lemma segVal_d {D : ℕ} (hD : 0 < D) {Δ X Y : Poly} {w len : ℕ} (hlen : len ≠ 0) {ups los : List SL}
     (hu : ∀ L ∈ ups, L.d ≠ 0) (hl : ∀ L ∈ los, L.d ≠ 0) (iu il : ℕ) :
@@ -840,12 +848,12 @@ def capTag : CapA → Tag
 
 def splitAt (splits : List Split) (k : ℕ) : SL := (splits.getD k ⟨SL.cst 0 1, 0, 1, 0, 1⟩).q
 
-def capAOk (σ : Bool) (Δ X Y : Poly) (b0 b1 R : ℕ) (splits : List Split) (cap : SL) : CapA → Bool
-  | .zeroC => ghOk σ Δ X Y b0 b1 R cap 0
+def capAOk (ck : RF → Bool) (σ : Bool) (Δ X Y : Poly) (b0 b1 R : ℕ) (splits : List Split) (cap : SL) : CapA → Bool
+  | .zeroC => ghOk ck σ Δ X Y b0 b1 R cap 0
   | .zeroT k => decide (k < splits.length) && splitAt splits k == cap
   | .par => true
   | .parT k _ => decide (k < splits.length)
-  | .linC => ghOk σ Δ X Y b0 b1 R cap 2
+  | .linC => ghOk ck σ Δ X Y b0 b1 R cap 2
   | .linT k => decide (k < splits.length) && splitAt splits k == cap.sub (sSL 1)
 
 def capAU (Δ X Y : Poly) (cap : SL) : CapA → RF
@@ -904,7 +912,7 @@ def lebRFs (Δ X Y : Poly) (D : ℕ) (r : RectM) (ax ay : CapA) : List RF :=
 /-- The numerator with the sign of the denominator folded in (`σ^e · num`). -/
 def snum (σ : Bool) (r : RF) : Poly := if σ || r.e % 2 == 0 then r.num else smul (-1) r.num
 
-lemma snum_sign {σ : Bool} {Δ X Y : Poly} {b0 b1 R : ℕ} {u δ : ℝ} (h : VCtx Δ X Y σ b0 b1 R u δ)
+lemma snum_sign {ck : RF → Bool} {σ : Bool} {Δ X Y : Poly} {b0 b1 R : ℕ} {u δ : ℝ} (h : VCtx ck Δ X Y σ b0 b1 R u δ)
     {r : RF} (hd : r.d ≠ 0) :
     (0 ≤ r.eval δ u ↔ 0 ≤ eval (snum σ r) u) ∧ (r.eval δ u < 0 ↔ eval (snum σ r) u < 0) := by
   have h1 : (0 : ℝ) < 1 - u ^ 2 := by nlinarith [h.hu0, h.hu1]
@@ -1033,9 +1041,9 @@ def fcOk (σ : Bool) (Δ X Y : Poly) (b0 b1 R : ℕ) (splits : List Split) (pat 
     BernZ.check (if pat.getD f.k false then c1 else smul (-1) c1) (c1.length - 1) b0 b1 R
 
 /-- The total test: `T ≥ 0` by Bernstein, or by a common-factor certificate. -/
-def totOk (σ : Bool) (Δ X Y : Poly) (b0 b1 R : ℕ) (splits : List Split) (pat : List Bool)
+def totOk (ck : RF → Bool) (σ : Bool) (Δ X Y : Poly) (b0 b1 R : ℕ) (splits : List Split) (pat : List Bool)
     (fcs : List FCert) (T : RF) : Bool :=
-  ckRF σ T b0 b1 R || fcs.any fun f => fcOk σ Δ X Y b0 b1 R splits pat f T
+  ck T || fcs.any fun f => fcOk σ Δ X Y b0 b1 R splits pat f T
 
 /-- A certificate at a vertex. -/
 structure VCert where
@@ -1061,17 +1069,17 @@ def lAltsP (Δ X Y : Poly) (D : ℕ) (pat : List Bool) (p : RectM × (List CapA 
 /-- **The test at a vertex**: every choice is valid, for every sign pattern of the splits every term
 has a consistent alternative, and every consistent combination plus the S-procedure terms is
 `≥ W`. -/
-def vertOk (D W : ℕ) (σ : Bool) (Δ X Y : Poly) (b0 b1 R : ℕ) (chs cvs : List SegE)
+def vertOk (ck : RF → Bool) (D W : ℕ) (σ : Bool) (Δ X Y : Poly) (b0 b1 R : ℕ) (chs cvs : List SegE)
     (crs : List RectM) (hbx vbx : List (List ℕ × List ℕ)) (c : VCert) : Bool :=
   hbx.length == chs.length && vbx.length == cvs.length &&
     c.hc.length == chs.length && c.vc.length == cvs.length && c.lc.length == crs.length &&
     c.splits.all (fun sp => sp.dm != 0 && sp.dp != 0) &&
     ((chs.zip hbx).zip c.hc).all (fun q => q.2.all fun x =>
-      segCOk σ Δ X Y b0 b1 R (hUps D q.1.1) (hLos D q.1.1) q.1.2 x.1) &&
+      segCOk ck σ Δ X Y b0 b1 R (hUps D q.1.1) (hLos D q.1.1) q.1.2 x.1) &&
     ((cvs.zip vbx).zip c.vc).all (fun q => q.2.all fun x =>
-      segCOk σ Δ X Y b0 b1 R (vUps D q.1.1) (vLos D q.1.1) q.1.2 x.1) &&
-    (crs.zip c.lc).all (fun p => p.2.1.all (capAOk σ Δ X Y b0 b1 R c.splits (capXm D p.1)) &&
-      p.2.2.all (capAOk σ Δ X Y b0 b1 R c.splits (capYm D p.1))) &&
+      segCOk ck σ Δ X Y b0 b1 R (vUps D q.1.1) (vLos D q.1.1) q.1.2 x.1) &&
+    (crs.zip c.lc).all (fun p => p.2.1.all (capAOk ck σ Δ X Y b0 b1 R c.splits (capXm D p.1)) &&
+      p.2.2.all (capAOk ck σ Δ X Y b0 b1 R c.splits (capYm D p.1))) &&
     (pats c.splits.length).all fun pat =>
       c.hc.all (fun l => l.any fun x => tagOk pat x.2) &&
       c.vc.all (fun l => l.any fun x => tagOk pat x.2) &&
@@ -1079,15 +1087,15 @@ def vertOk (D W : ℕ) (σ : Bool) (Δ X Y : Poly) (b0 b1 R : ℕ) (chs cvs : Li
       (cprod (reord (((chs.zip hbx).zip c.hc).map (hAltsP Δ X Y D pat) ++
           ((cvs.zip vbx).zip c.vc).map (vAltsP Δ X Y D pat) ++
           (crs.zip c.lc).map (lAltsP Δ X Y D pat)))).all fun comb =>
-        totOk σ Δ X Y b0 b1 R c.splits pat c.fcs (sumRF Δ (comb ++
+        totOk ck σ Δ X Y b0 b1 R c.splits pat c.fcs (sumRF Δ (comb ++
           (c.splits.zip pat).map (fun x => sproc Δ X Y x.1 x.2) ++ [RF.const (-(W : ℤ)) 1]))
 
 /-! ### Soundness -/
 
 /-- A segment choice: some alternative is at most the term. -/
-lemma segC_ge {σ : Bool} {Δ X Y : Poly} {b0 b1 R : ℕ} {u δ : ℝ} (h : VCtx Δ X Y σ b0 b1 R u δ)
+lemma segC_ge {ck : RF → Bool} {σ : Bool} {Δ X Y : Poly} {b0 b1 R : ℕ} {u δ : ℝ} (h : VCtx ck Δ X Y σ b0 b1 R u δ)
     {ups los : List SL} {bx : List ℕ × List ℕ} {sc : SegC} {w D len : ℕ} {T : ℝ} (hT : 0 ≤ T)
-    (hok : segCOk σ Δ X Y b0 b1 R ups los bx sc = true)
+    (hok : segCOk ck σ Δ X Y b0 b1 R ups los bx sc = true)
     (hbox : DomU u (vtx X Y δ u) ups bx.1 ∧ DomL u (vtx X Y δ u) los bx.2)
     (hcore : ∀ Ua La, Ua ≠ [] → La ≠ [] → (∀ a ∈ Ua, a < ups.length) → (∀ b ∈ La, b < los.length) →
       DomU u (vtx X Y δ u) ups Ua → DomL u (vtx X Y δ u) los La →
@@ -1118,9 +1126,9 @@ lemma patAt_getD (splits : List Split) (u : ℝ) (v : ℝ × ℝ) {k : ℕ} (hk 
     List.getD_eq_getElem _ _ hk]
 
 /-- A cap alternative consistent with the pattern at the vertex bounds `ĝ`. -/
-lemma capA_ge {σ : Bool} {Δ X Y : Poly} {b0 b1 R : ℕ} {u δ : ℝ} (h : VCtx Δ X Y σ b0 b1 R u δ)
+lemma capA_ge {ck : RF → Bool} {σ : Bool} {Δ X Y : Poly} {b0 b1 R : ℕ} {u δ : ℝ} (h : VCtx ck Δ X Y σ b0 b1 R u δ)
     {splits : List Split} {cap : SL} (hcap : cap.d ≠ 0) {a : CapA}
-    (hok : capAOk σ Δ X Y b0 b1 R splits cap a = true)
+    (hok : capAOk ck σ Δ X Y b0 b1 R splits cap a = true)
     (htag : tagOk (patAt splits u (vtx X Y δ u)) (capTag a) = true) :
     SqArea.ghat (Real.sin (2 * Real.arctan u)) (Real.cos (2 * Real.arctan u))
       (cap.val u (vtx X Y δ u)) ≤ (capAU Δ X Y cap a).eval δ u := by
@@ -1156,8 +1164,8 @@ lemma lebRF_d (Δ X Y : Poly) {D : ℕ} (hD : 0 < D) (r : RectM) (hmx : modeP r.
   exact Nat.mul_ne_zero one_ne_zero (RF.add_d _ (RF.add_d _ (by simp [RF.const])
     (by simpa [RF.neg] using a)) (by simpa [RF.neg] using b))
 
-lemma lebRF_le {D : ℕ} (hD : 0 < D) {σ : Bool} {Δ X Y : Poly} {b0 b1 R : ℕ} {u δ : ℝ}
-    (h : VCtx Δ X Y σ b0 b1 R u δ) (r : RectM) (hmx : modeP r.2.1 = true)
+lemma lebRF_le {ck : RF → Bool} {D : ℕ} (hD : 0 < D) {σ : Bool} {Δ X Y : Poly} {b0 b1 R : ℕ} {u δ : ℝ}
+    (h : VCtx ck Δ X Y σ b0 b1 R u δ) (r : RectM) (hmx : modeP r.2.1 = true)
     (hmy : modeP r.2.2.1 = true) {ax ay : CapA}
     (gx : SqArea.ghat (Real.sin (2 * Real.arctan u)) (Real.cos (2 * Real.arctan u))
       ((capXm D r).val u (vtx X Y δ u)) ≤ (capAU Δ X Y (capXm D r) ax).eval δ u)
@@ -1260,8 +1268,8 @@ lemma lebRFs_d (Δ X Y : Poly) {D : ℕ} (hD : 0 < D) (r : RectM) (hmx : modeP r
     · simp only [mcRF]; rf_dok
     · exact l0
 
-lemma lebRFs_le {D : ℕ} (hD : 0 < D) {σ : Bool} {Δ X Y : Poly} {b0 b1 R : ℕ} {u δ : ℝ}
-    (h : VCtx Δ X Y σ b0 b1 R u δ) (r : RectM) (hmx : modeP r.2.1 = true)
+lemma lebRFs_le {ck : RF → Bool} {D : ℕ} (hD : 0 < D) {σ : Bool} {Δ X Y : Poly} {b0 b1 R : ℕ} {u δ : ℝ}
+    (h : VCtx ck Δ X Y σ b0 b1 R u δ) (r : RectM) (hmx : modeP r.2.1 = true)
     (hmy : modeP r.2.2.1 = true) (hk : ckOk r.2.2.2 = true) {ax ay : CapA}
     (gx : SqArea.ghat (Real.sin (2 * Real.arctan u)) (Real.cos (2 * Real.arctan u))
       ((capXm D r).val u (vtx X Y δ u)) ≤ (capAU Δ X Y (capXm D r) ax).eval δ u)
@@ -1401,7 +1409,7 @@ lemma sproc_d (Δ X Y : Poly) {sp : Split} (hq : sp.q.d ≠ 0) (hm : sp.dm ≠ 0
     (b : Bool) : (sproc Δ X Y sp b).d ≠ 0 := by
   cases b <;> simp [sproc, RF.neg, RF.mul, RF.const, SL.atV, hq, hm, hp]
 
-lemma sproc_le {σ : Bool} {Δ X Y : Poly} {b0 b1 R : ℕ} {u δ : ℝ} (h : VCtx Δ X Y σ b0 b1 R u δ)
+lemma sproc_le {ck : RF → Bool} {σ : Bool} {Δ X Y : Poly} {b0 b1 R : ℕ} {u δ : ℝ} (h : VCtx ck Δ X Y σ b0 b1 R u δ)
     {sp : Split} (hq : sp.q.d ≠ 0) (hm : sp.dm ≠ 0) (hp : sp.dp ≠ 0) :
     (sproc Δ X Y sp (decide (0 ≤ sp.q.val u (vtx X Y δ u)))).eval δ u ≤ 0 := by
   have e := eval_atV sp.q Δ X Y h.hΔ h.ok.hδ
@@ -1424,9 +1432,9 @@ lemma list_sum_nonpos : ∀ (l : List ℝ), (∀ y ∈ l, y ≤ 0) → l.sum ≤
     linarith [h a List.mem_cons_self, list_sum_nonpos l fun y hy => h y (List.mem_cons_of_mem _ hy)]
 
 /-- **Soundness of the total test.** -/
-lemma totOk_sound {σ : Bool} {Δ X Y : Poly} {b0 b1 R : ℕ} {u δ : ℝ} (h : VCtx Δ X Y σ b0 b1 R u δ)
+lemma totOk_sound {ck : RF → Bool} {σ : Bool} {Δ X Y : Poly} {b0 b1 R : ℕ} {u δ : ℝ} (h : VCtx ck Δ X Y σ b0 b1 R u δ)
     {splits : List Split} (hsq : ∀ sp ∈ splits, sp.q.d ≠ 0) {fcs : List FCert} {T : RF}
-    (hT : T.d ≠ 0) (hok : totOk σ Δ X Y b0 b1 R splits (patAt splits u (vtx X Y δ u)) fcs T = true) :
+    (hT : T.d ≠ 0) (hok : totOk ck σ Δ X Y b0 b1 R splits (patAt splits u (vtx X Y δ u)) fcs T = true) :
     0 ≤ T.eval δ u := by
   simp only [totOk, Bool.or_eq_true, List.any_eq_true] at hok
   rcases hok with hok | ⟨f, _, hf⟩
@@ -1473,12 +1481,12 @@ lemma totOk_sound {σ : Bool} {Δ X Y : Poly} {b0 b1 R : ℕ} {u δ : ℝ} (h : 
     nlinarith
 
 /-- **Soundness of the test at a vertex**: `W ≤ fE(v)`. -/
-theorem vertOk_sound {D W : ℕ} (hD : 0 < D) {σ : Bool} {Δ X Y : Poly} {b0 b1 R : ℕ} {u δ : ℝ}
-    (h : VCtx Δ X Y σ b0 b1 R u δ) {chs cvs : List SegE} {crs : List RectM}
+theorem vertOk_sound {ck : RF → Bool} {D W : ℕ} (hD : 0 < D) {σ : Bool} {Δ X Y : Poly} {b0 b1 R : ℕ} {u δ : ℝ}
+    (h : VCtx ck Δ X Y σ b0 b1 R u δ) {chs cvs : List SegE} {crs : List RectM}
     (hch : ∀ e ∈ chs, e.1 < e.2.2.1) (hcv : ∀ e ∈ cvs, e.2.1 < e.2.2.2.1)
     {hbx vbx : List (List ℕ × List ℕ)} (hbd : BoxDom D u (vtx X Y δ u) chs cvs hbx vbx) {c : VCert}
     (hsq : ∀ sp ∈ c.splits, sp.q.d ≠ 0) (hmd : ∀ r ∈ crs, modeP r.2.1 = true ∧ modeP r.2.2.1 = true ∧ ckOk r.2.2.2 = true)
-    (hok : vertOk D W σ Δ X Y b0 b1 R chs cvs crs hbx vbx c = true) :
+    (hok : vertOk ck D W σ Δ X Y b0 b1 R chs cvs crs hbx vbx c = true) :
     (W : ℝ) ≤ fE (Real.sin (2 * Real.arctan u)) (Real.cos (2 * Real.arctan u))
       (chs.map (hsegT (2 * Real.arctan u) D) ++ cvs.map (vsegT (2 * Real.arctan u) D))
       (crs.map (rectT (2 * Real.arctan u) D)) (vtx X Y δ u) := by

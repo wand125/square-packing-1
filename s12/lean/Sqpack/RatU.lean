@@ -152,10 +152,10 @@ the numerator times `σ^e` has non-negative Bernstein coefficients of degree `n`
 def checkRF (σ : Bool) (r : RF) (n U0 U1 R : ℕ) : Bool :=
   BernZ.check (if σ || r.e % 2 == 0 then r.num else smul (-1) r.num) n U0 U1 R
 
-lemma nonneg_of_checkRF {σ : Bool} {r : RF} {n U0 U1 R : ℕ} (hc : checkRF σ r n U0 U1 R = true)
-    (hR : 0 < R) {δ u : ℝ} (h : Ok δ u) (hσ : if σ then 0 < δ else δ < 0) (hd : r.d ≠ 0)
-    (hu0 : (U0 : ℝ) / R ≤ u) (hu1 : u ≤ (U1 : ℝ) / R) : 0 ≤ r.eval δ u := by
-  have hnum := BernZ.nonneg_of_check hc hR hu0 hu1
+/-- `r ≥ 0` from the sign of its numerator (times `σ^e`). -/
+lemma nonneg_of_snumP {σ : Bool} {r : RF} {δ u : ℝ} (h : Ok δ u) (hσ : if σ then 0 < δ else δ < 0)
+    (hd : r.d ≠ 0) (hnum : 0 ≤ BernZ.eval (if σ || r.e % 2 == 0 then r.num else smul (-1) r.num) u) :
+    0 ≤ r.eval δ u := by
   have h1 : (0 : ℝ) < 1 - u ^ 2 := by nlinarith [h.hu0, h.hu1]
   have h2 : (0 : ℝ) < 2 * u := by linarith [h.hu0]
   have h3 : (0 : ℝ) < 1 + u ^ 2 := by positivity
@@ -184,6 +184,11 @@ lemma nonneg_of_checkRF {σ : Bool} {r : RF} {n U0 U1 R : ℕ} (hc : checkRF σ 
     have hδe : δ ^ r.e < 0 := hodd.pow_neg hσ
     push_cast at hnum
     exact div_nonneg_of_nonpos (by linarith) (mul_neg_of_neg_of_pos hδe hrest).le
+
+lemma nonneg_of_checkRF {σ : Bool} {r : RF} {n U0 U1 R : ℕ} (hc : checkRF σ r n U0 U1 R = true)
+    (hR : 0 < R) {δ u : ℝ} (h : Ok δ u) (hσ : if σ then 0 < δ else δ < 0) (hd : r.d ≠ 0)
+    (hu0 : (U0 : ℝ) / R ≤ u) (hu1 : u ≤ (U1 : ℝ) / R) : 0 ≤ r.eval δ u := by
+  exact nonneg_of_snumP h hσ hd (BernZ.nonneg_of_check hc hR hu0 hu1)
 
 end RatU
 

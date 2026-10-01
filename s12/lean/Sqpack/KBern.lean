@@ -37,7 +37,11 @@ def hadd (B : ℕ) (p q : KH) : KH :=
   else if p.n < q.n then ⟨p.v * ((B ^ (q.n - p.n) : ℕ) : ℤ) + q.v, q.n, p.b + q.b⟩
   else ⟨p.v + q.v * ((B ^ (p.n - q.n) : ℕ) : ℤ), p.n, p.b + q.b⟩
 
-def hmul (p q : KH) : KH := ⟨p.v * q.v, p.n + q.n, p.b * q.b⟩
+/-- The product (a factor `1` is skipped). -/
+def hmul (p q : KH) : KH :=
+  if q.n = 0 ∧ q.v = 1 ∧ q.b = 1 then p
+  else if p.n = 0 ∧ p.v = 1 ∧ p.b = 1 then q
+  else ⟨p.v * q.v, p.n + q.n, p.b * q.b⟩
 
 def hsmul (c : ℤ) (p : KH) : KH := ⟨c * p.v, p.n, c.natAbs * p.b⟩
 
@@ -94,9 +98,24 @@ lemma rep_hadd (hB : 0 < B) {p q : Poly} {h k : KH} (hp : RepH A B p h) (hq : Re
 lemma rep_hmul {p q : Poly} {h k : KH} (hp : RepH A B p h) (hq : RepH A B q k) :
     RepH A B (mul p q) (hmul h k) := by
   obtain ⟨a, b, c⟩ := hp; obtain ⟨a', b', c'⟩ := hq
-  refine ⟨?_, (l1_mul p q).trans (Nat.mul_le_mul b b'), (length_mul' p q).trans ?_⟩
-  · simp only [hmul, Int.cast_mul, a, a', BernZ.eval_mul, pow_add]; ring
-  · simp only [hmul]; omega
+  have hl := l1_mul p q
+  have hn := length_mul' p q
+  unfold hmul
+  split_ifs with e1 e2
+  · obtain ⟨n0, v1, b1⟩ := e1
+    rw [n0, v1] at a'; rw [b1] at b'; rw [n0] at c'
+    refine ⟨?_, by nlinarith, by omega⟩
+    rw [a, BernZ.eval_mul]
+    simp only [Int.cast_one, pow_zero, one_mul] at a'
+    rw [← a', mul_one]
+  · obtain ⟨n0, v1, b1⟩ := e2
+    rw [n0, v1] at a; rw [b1] at b; rw [n0] at c
+    refine ⟨?_, by nlinarith, by omega⟩
+    rw [a', BernZ.eval_mul]
+    simp only [Int.cast_one, pow_zero, one_mul] at a
+    rw [← a, one_mul]
+  · refine ⟨?_, hl.trans (Nat.mul_le_mul b b'), hn.trans (by show _ ≤ h.n + k.n + 1; omega)⟩
+    simp only [Int.cast_mul, a, a', BernZ.eval_mul, pow_add]; ring
 
 lemma rep_hsmul (c : ℤ) {p : Poly} {h : KH} (hp : RepH A B p h) : RepH A B (smul c p) (hsmul c h) := by
   obtain ⟨a, b, d⟩ := hp
@@ -370,6 +389,15 @@ theorem hcheck_sound {U0 U1 R K M : ℕ} (hR : 0 < R) (hM1 : U0 + U1 ≤ M) (hM2
       rw [closure_Ico hlt'.ne] at hcl
       exact hcl ⟨hu0, hu1⟩
   · exact hIco u ⟨hu0, hlt⟩
+
+/-- The test of `±p` (`neg`: of `−p`). -/
+theorem hcheck_sound' {U0 U1 R K M : ℕ} (hR : 0 < R) (hM1 : U0 + U1 ≤ M) (hM2 : 2 * R ≤ M)
+    {p : Poly} {h : KH} (hp : RepH ((U0 : ℤ) + U1 * 2 ^ K) (R * (1 + 2 ^ K)) p h) {neg : Bool}
+    (hc : hcheck K M neg h = true) {u : ℝ} (hu0 : (U0 : ℝ) / R ≤ u) (hu1 : u ≤ (U1 : ℝ) / R) :
+    0 ≤ eval (if neg then smul (-1) p else p) u := by
+  cases neg
+  · exact hcheck_sound hR hM1 hM2 hp hc hu0 hu1
+  · exact hcheck_sound (h := ⟨-h.v, h.n, h.b⟩) hR hM1 hM2 (rep_neg hp) (by simpa [hcheck] using hc) hu0 hu1
 
 end KArith
 

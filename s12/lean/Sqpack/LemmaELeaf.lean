@@ -1,4 +1,4 @@
-import Sqpack.LemmaEVert
+import Sqpack.LemmaEK
 
 /-!
 # Lemma E on a pose box: the `EXACT` leaf
@@ -82,7 +82,7 @@ def subOk (D W R : ℕ) (side : List PL) (chs cvs : List SegE) (crs : List RectM
       decide (k < side.length) && (nm.take m).all (· == 0) &&
         checkPos (sgn (!sb.σ) (nm.drop m)) ((nm.drop m).length - 1) b0 sb.b1 R
     | .val c => c.splits.all (fun sp => sp.q.d != 0) &&
-      vertOk D W sb.σ Δ X Y b0 sb.b1 R chs cvs crs hbx vbx c
+      LemmaEK.vertOkK D W sb.σ Δ X Y b0 sb.b1 R LemmaEK.kK chs cvs crs hbx vbx c
 
 /-- A pair's certificate: parallel, or sub-bins covering `[U0, U1]` in order. -/
 inductive PairCert where
@@ -212,8 +212,10 @@ theorem pair_sound {D W R U0 U1 : ℕ} {side : List PL} {chs cvs : List SegE} {c
     simp only [subOk, Bool.and_eq_true, Nat.blt_eq] at hsub
     obtain ⟨⟨_, hsg⟩, hk⟩ := hsub
     have hσ := sign_of_signOk hsg hR hpos hb0 hb1
-    have ctx : VCtx (detP P Q) (xP P Q) (yP P Q) sb.σ b0 sb.b1 R u (eval (detP P Q) u) :=
-      ⟨hR, hpos, hlt, hb0, hb1, rfl, hσ⟩
+    have hδ : eval (detP P Q) u ≠ 0 := by split_ifs at hσ <;> [exact hσ.ne'; exact hσ.ne]
+    have ctx : VCtx (LemmaEK.ckP (LemmaEK.mkCtx (detP P Q) (xP P Q) (yP P Q) b0 sb.b1 R LemmaEK.kK) sb.σ)
+        (detP P Q) (xP P Q) (yP P Q) sb.σ b0 sb.b1 R u (eval (detP P Q) u) :=
+      ⟨hR, hpos, hlt, hb0, hb1, rfl, hσ, LemmaEK.ckP_hck hR ⟨hpos, hlt, hδ⟩ hσ hb0 hb1⟩
     rcases hsbk : sb.kind with ⟨k, m⟩ | c
     · -- outside the region: a contradiction
       rw [hsbk] at hk
@@ -252,7 +254,8 @@ theorem pair_sound {D W R U0 U1 : ℕ} {side : List PL} {chs cvs : List SegE} {c
     · rw [hsbk] at hk
       rw [hv']
       simp only [Bool.and_eq_true, List.all_eq_true, bne_iff_ne, ne_eq] at hk
-      exact vertOk_sound hcl.hD ctx hcl.hch hcl.hcv (by rw [← hv']; exact hbd v hv) hk.1 hmd hk.2
+      exact vertOk_sound hcl.hD ctx hcl.hch hcl.hcv (by rw [← hv']; exact hbd v hv) hk.1 hmd
+        (LemmaEK.vertOkK'_imp (LemmaEK.mkCtx_ok hR) hk.2)
 
 /-- **All pairs**: every pair `i < j` of the list has a passing certificate. -/
 lemma allPairs_sound {D W R U0 U1 : ℕ} {side : List PL} {chs cvs : List SegE} {crs : List RectM}
