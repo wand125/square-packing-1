@@ -24,6 +24,7 @@ import Sqpack.LemmaE
 import Sqpack.RatU
 import Sqpack.LemmaEPoly
 import Sqpack.LemmaEVert
+import Sqpack.LemmaELeaf
 import Sqpack.SegParts
 import Sqpack.ZMTreeM
 import Sqpack.LemmaL

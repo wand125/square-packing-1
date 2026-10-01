@@ -410,6 +410,208 @@ lemma formsSL_match {u : ℝ} (hu0 : 0 < u) (hu1 : u < 1) {A B : ℝ} {lo1 lo2 u
   · right; right; right; right; right; right; left; exact ⟨Nat.mul_ne_zero d4 d1, fun c => by rw [aff_subF, val_sub _ _ d4 d1 hu0 hu1, e4, e1]⟩
   · right; right; right; right; right; right; right; exact ⟨Nat.mul_ne_zero d4 d2, fun c => by rw [aff_subF, val_sub _ _ d4 d2 hu0 hu1, e4, e2]⟩
 
+/-! ## 5.  The `EXACT` leaf -/
+
+/-- The data of a leaf: the lower sides (`wx`, `wy`: wall or box side), the claims, the lines of
+the arrangement, and the pair certificates for `sideL ++ Ls`. -/
+structure ExLeaf where
+  wx : Bool
+  wy : Bool
+  chs : List SegE
+  cvs : List SegE
+  crs : List RectE
+  Ls : List PL
+  certs : List (List PairCert)
+
+def hFormsSLs (D : ℕ) (e : SegE) : List SL :=
+  formsSL (SL.cst e.1 D) (SL.cst e.2.2.1 D) (hTA D e.2.1) (hTB D e.2.1) (hTC D e.2.1) (hTD D e.2.1)
+def vFormsSLs (D : ℕ) (e : SegE) : List SL :=
+  formsSL (SL.cst e.2.1 D) (SL.cst e.2.2.2.1 D) (vLXs D e.1) (vLYs D e.1) (vUXs D e.1) (vUYs D e.1)
+def lebSLs (D : ℕ) (r : RectE) : List SL :=
+  [capX D r.1, (capX D r.1).sub (sSL 1), capY D r.2.1, (capY D r.2.1).sub (sSL 1)]
+
+/-- **The `EXACT` leaf test.** -/
+def exOk (D S R W x0 x1 y0 y1 U0 U1 : ℕ) (segs : List SegE) (rects : List RectE) (lf : ExLeaf) :
+    Bool :=
+  let side := sideL (D * S) x0 x1 y0 y1 lf.wx lf.wy
+  let pin := pinOk (D * S) x0 x1 y0 y1 U0 U1 R lf.wx lf.wy lf.Ls
+  Nat.blt U1 R && Nat.ble U0 U1 && decide (lf.chs ++ lf.cvs).Nodup && decide lf.crs.Nodup &&
+    lf.chs.all (fun e => segs.contains e && e.2.1 == e.2.2.2.1 && Nat.blt e.1 e.2.2.1 &&
+      (hFormsSLs D e).all pin) &&
+    lf.cvs.all (fun e => segs.contains e && e.1 == e.2.2.1 && Nat.blt e.2.1 e.2.2.2.1 &&
+      (vFormsSLs D e).all pin) &&
+    lf.crs.all (fun r => rects.contains r &&
+      Nat.ble (2 * x1 * widD R U0 + D * S * widN R U0 U1) (2 * r.2.2.1 * S * widD R U0) &&
+      Nat.ble (2 * y1 * widD R U0 + D * S * widN R U0 U1) (2 * r.2.2.2.1 * S * widD R U0) &&
+      (lebSLs D r).all pin) &&
+    allPairsOk D W R U0 U1 side lf.chs lf.cvs lf.crs (side ++ lf.Ls) lf.certs
+
+lemma pinned_of_formsSL {Q x0 x1 y0 y1 U0 U1 R : ℕ} (hQ : 0 < Q) (hR : 0 < R) {wx wy : Bool}
+    {Ls : List PL} {u : ℝ} (hu0 : 0 < u) (hu1 : u < 1) (hb0 : (U0 : ℝ) / R ≤ u)
+    (hb1 : u ≤ (U1 : ℝ) / R) {Ls' : List SL}
+    (hall : Ls'.all (pinOk Q x0 x1 y0 y1 U0 U1 R wx wy Ls) = true) {Fs : List (ℝ × ℝ × ℝ)}
+    (hm : ∀ F ∈ Fs, ∃ L ∈ Ls', L.d ≠ 0 ∧ ∀ c, aff F c = L.val u c) :
+    ∀ F ∈ Fs, Pinned (poly ((sideL Q x0 x1 y0 y1 wx wy).map (evalPL · u))) (Ls.map (evalPL · u)) F := by
+  intro F hF
+  obtain ⟨L, hL, hd, he⟩ := hm F hF
+  exact pin_sound hQ hR ((List.all_eq_true.mp hall) L hL) hd hu0 hu1 hb0 hb1 he
+
+/-- **Soundness of the `EXACT` leaf** (Lemma E). -/
+theorem CovMPo.of_exact {D S Mq R W x0 x1 y0 y1 U0 U1 : ℕ} {pts : List (ℕ × ℕ × ℕ)}
+    {segs : List SegE} {rects : List RectE} (hD : 0 < D) (hS : 0 < S) (hR : 0 < R) {lf : ExLeaf}
+    (h : exOk D S R W x0 x1 y0 y1 U0 U1 segs rects lf = true) :
+    CovMPo D S Mq R W pts segs rects x0 x1 y0 y1 U0 U1 := by
+  simp only [exOk, Bool.and_eq_true, Nat.blt_eq, Nat.ble_eq, decide_eq_true_eq, List.all_eq_true,
+    beq_iff_eq, List.contains_iff_mem] at h
+  obtain ⟨⟨⟨⟨⟨⟨⟨hU1, hU01⟩, hnd⟩, hcr⟩, hch⟩, hcv⟩, hcrs⟩, hpairs⟩ := h
+  intro c u hx0 hx1 hy0 hy1 hu0 hu1 hbox
+  have hQ : 0 < D * S := Nat.mul_pos hD hS
+  have hRr : (0 : ℝ) < R := by exact_mod_cast hR
+  have hpos : 0 < u := lt_of_le_of_lt (by positivity) hu0
+  have hlt : u < 1 := by
+    have : (U1 : ℝ) < R := by exact_mod_cast hU1
+    have := (div_lt_one hRr).mpr this
+    linarith
+  have hb0 : (U0 : ℝ) / R ≤ u := hu0.le
+  set θ := 2 * Real.arctan u with hθ
+  have hs : 0 < Real.sin θ := by rw [hθ, (trig u).1]; positivity
+  have hc : 0 < Real.cos θ := by
+    rw [hθ, (trig u).2]; apply div_pos _ (by positivity); nlinarith
+  -- 1. the mass is at least `fE` at the centre
+  have hwid : wid θ / 2 ≤ (widN R U0 U1 : ℝ) / widD R U0 / 2 := by
+    have := wid_le_widHat hR (Nat.le_of_lt hU1) hb0 hu1; linarith
+  have hwd : 0 < widD R U0 := by unfold widD; have : 0 < R * R := Nat.mul_pos hR hR; omega
+  have hmass := fE_le_mass hD hs hc c hnd
+    (fun e he => ⟨(hch e he).1.1.1, (hch e he).1.1.2, (hch e he).1.2⟩)
+    (fun e he => ⟨(hcv e he).1.1.1, (hcv e he).1.1.2, (hcv e he).1.2⟩) hcr
+    (fun r hr => by
+      obtain ⟨⟨⟨hm, h1⟩, h2⟩, _⟩ := hcrs r hr
+      refine ⟨hm, fun p hp => ?_⟩
+      obtain ⟨a1, a2⟩ := abs_sub_le_wid hp
+      rw [abs_le] at a1 a2
+      have k1 := add_half_le hD hS hwd h1
+      have k2 := add_half_le hD hS hwd h2
+      push_cast at hx1 hy1
+      constructor <;> linarith)
+  -- 2. the centre is in the region
+  have hadm := (sq_subset_box_iff _ c θ).mp hbox
+  have hwθ : wid θ = (1 - u ^ 2 + 2 * u) / (1 + u ^ 2) := by
+    rw [hθ, wid_two_arctan hpos.le hlt.le, widU]
+  have hcreg : c ∈ poly ((sideL (D * S) x0 x1 y0 y1 lf.wx lf.wy).map (evalPL · u)) := by
+    have hQr : (0 : ℝ) < ((D * S : ℕ) : ℝ) := by exact_mod_cast hQ
+    intro C hC
+    simp only [List.mem_map, sideL, List.mem_cons, List.not_mem_nil, or_false] at hC
+    obtain ⟨P, hP, rfl⟩ := hC
+    obtain ⟨a1, a2, a3, a4⟩ := hadm
+    rw [hwθ] at a1 a3
+    have hN : (0 : ℝ) < 1 + u ^ 2 := by positivity
+    rcases hP with rfl | rfl | rfl | rfl
+    · split_ifs
+      · simp only [evalPL, eval_smul, eval_Np, BernZ.eval_add, eval_Cp, eval_Sp, eval_cons, eval_nil]
+        push_cast
+        rw [div_div, div_le_iff₀ (by positivity)] at a1
+        nlinarith
+      · simp only [evalPL, eval_cons, eval_nil]; push_cast
+        rw [div_le_iff₀ (by push_cast at hQr; exact hQr)] at hx0
+        push_cast at hx0; nlinarith
+    · simp only [evalPL, eval_cons, eval_nil]; push_cast
+      rw [le_div_iff₀ (by push_cast at hQr; exact hQr)] at hx1
+      push_cast at hx1; nlinarith
+    · split_ifs
+      · simp only [evalPL, eval_smul, eval_Np, BernZ.eval_add, eval_Cp, eval_Sp, eval_cons, eval_nil]
+        push_cast
+        rw [div_div, div_le_iff₀ (by positivity)] at a3
+        nlinarith
+      · simp only [evalPL, eval_cons, eval_nil]; push_cast
+        rw [div_le_iff₀ (by push_cast at hQr; exact hQr)] at hy0
+        push_cast at hy0; nlinarith
+    · simp only [evalPL, eval_cons, eval_nil]; push_cast
+      rw [le_div_iff₀ (by push_cast at hQr; exact hQr)] at hy1
+      push_cast at hy1; nlinarith
+  -- 3. every form is pinned
+  have hfix : Fixed (poly ((sideL (D * S) x0 x1 y0 y1 lf.wx lf.wy).map (evalPL · u)))
+      (Real.sin θ) (lf.Ls.map (evalPL · u))
+      (lf.chs.map (hsegT θ D) ++ lf.cvs.map (vsegT θ D)) (lf.crs.map (rectT θ D)) := by
+    have hDr : (0 : ℝ) < D := by exact_mod_cast hD
+    have d2D : 2 * D ≠ 0 := by omega
+    refine ⟨fun t ht => ?_, fun l hl => ?_⟩
+    · rcases List.mem_append.mp ht with ht | ht
+      · obtain ⟨e, he, rfl⟩ := List.mem_map.mp ht
+        obtain ⟨⟨⟨_, _⟩, hx⟩, hpin⟩ := hch e he
+        have hAB : (e.1 : ℝ) / D < e.2.2.1 / D := div_lt_div_of_pos_right (by exact_mod_cast hx) hDr
+        refine ⟨div_nonneg (Nat.cast_nonneg _) (by linarith), by simp only [hsegT]; linarith,
+          pinned_of_formsSL hQ hR hpos hlt hb0 hu1 (List.all_eq_true.mpr hpin) ?_⟩
+        refine formsSL_match hpos hlt (by simp [SL.cst]; omega) (by simp [SL.cst]; omega)
+          (by simp [hTA]; omega) (by simp [hTB]; omega) (by simp [hTC]; omega) (by simp [hTD]; omega)
+          (fun c => by rw [val_cst]; push_cast; rfl) (fun c => by rw [val_cst]; push_cast; rfl)
+          (fun c => (val_hTA hD hpos hlt _ c).symm) (fun c => (val_hTB hD hpos hlt _ c).symm)
+          (fun c => (val_hTC hD hpos hlt _ c).symm) (fun c => (val_hTD hD hpos hlt _ c).symm)
+      · obtain ⟨e, he, rfl⟩ := List.mem_map.mp ht
+        obtain ⟨⟨⟨_, _⟩, hy⟩, hpin⟩ := hcv e he
+        have hAB : (e.2.1 : ℝ) / D < e.2.2.2.1 / D :=
+          div_lt_div_of_pos_right (by exact_mod_cast hy) hDr
+        refine ⟨div_nonneg (Nat.cast_nonneg _) (by linarith), by simp only [vsegT]; linarith,
+          pinned_of_formsSL hQ hR hpos hlt hb0 hu1 (List.all_eq_true.mpr hpin) ?_⟩
+        refine formsSL_match hpos hlt (by simp [SL.cst]; omega) (by simp [SL.cst]; omega)
+          (by simp [vLXs]; omega) (by simp [vLYs]; omega) (by simp [vUXs]; omega) (by simp [vUYs]; omega)
+          (fun c => by rw [val_cst]; push_cast; rfl) (fun c => by rw [val_cst]; push_cast; rfl)
+          (fun c => (val_vLX hD hpos hlt _ c).symm) (fun c => (val_vLY hD hpos hlt _ c).symm)
+          (fun c => (val_vUX hD hpos hlt _ c).symm) (fun c => (val_vUY hD hpos hlt _ c).symm)
+    · obtain ⟨r, hr, rfl⟩ := List.mem_map.mp hl
+      obtain ⟨_, hpin⟩ := hcrs r hr
+      have hp := hpin
+      have dX : (capX D r.1).d ≠ 0 := by simp [capX]; omega
+      have dY : (capY D r.2.1).d ≠ 0 := by simp [capY]; omega
+      have ds : (sSL 1).d ≠ 0 := by simp [sSL]
+      have ex : ∀ c, aff (rectT θ D r).2.1 c = (capX D r.1).val u c := fun c => by
+        rw [val_capX hD hpos hlt]; simp only [aff, rectT]; ring
+      have ey : ∀ c, aff (rectT θ D r).2.2 c = (capY D r.2.1).val u c := fun c => by
+        rw [val_capY hD hpos hlt]; simp only [aff, rectT]; ring
+      have hsθ : Real.sin θ = 2 * u / (1 + u ^ 2) := by rw [hθ, (trig u).1]
+      refine ⟨Nat.cast_nonneg _, pin_sound hQ hR (hp (capX D r.1) (by simp [lebSLs])) dX hpos hlt hb0 hu1 ex,
+        pin_sound hQ hR (hp ((capX D r.1).sub (sSL 1)) (by simp [lebSLs])) (Nat.mul_ne_zero dX ds) hpos hlt hb0 hu1 ?_,
+        pin_sound hQ hR (hp (capY D r.2.1) (by simp [lebSLs])) dY hpos hlt hb0 hu1 ey,
+        pin_sound hQ hR (hp ((capY D r.2.1).sub (sSL 1)) (by simp [lebSLs])) (Nat.mul_ne_zero dY ds) hpos hlt hb0 hu1 ?_⟩
+      · intro c; rw [aff_subF, aff_constF, val_sub _ _ dX ds hpos hlt, val_sSL one_ne_zero, ex, hsθ]
+        simp
+      · intro c; rw [aff_subF, aff_constF, val_sub _ _ dY ds hpos hlt, val_sSL one_ne_zero, ey, hsθ]
+        simp
+  -- 4. the vertex
+  obtain ⟨v, hv, ⟨C1, hC1, C2, hC2, hdet, ht1, ht2⟩, hle⟩ :=
+    exists_vertex_le_fE hs hc (region_bounded hQ lf.wx lf.wy u) hfix hcreg
+  set side := sideL (D * S) x0 x1 y0 y1 lf.wx lf.wy
+  have hmemL : ∀ C ∈ side.map (evalPL · u) ++ lf.Ls.map (evalPL · u),
+      ∃ P ∈ side ++ lf.Ls, C = evalPL P u := by
+    intro C hC
+    rw [← List.map_append] at hC
+    obtain ⟨P, hP, rfl⟩ := List.mem_map.mp hC
+    exact ⟨P, hP, rfl⟩
+  obtain ⟨A, hA, rfl⟩ := hmemL C1 hC1
+  obtain ⟨B, hB, rfl⟩ := hmemL C2 hC2
+  obtain ⟨i, hi, hiA⟩ := List.mem_iff_getElem.mp hA
+  obtain ⟨j, hj, hjB⟩ := List.mem_iff_getElem.mp hB
+  have hdetAB : eval (detP A B) u ≠ 0 := by rw [eval_detP]; exact hdet
+  have hcl : Claims D lf.chs lf.cvs :=
+    ⟨hD, fun e he => (hch e he).1.2, fun e he => (hcv e he).1.2⟩
+  have hW : (W : ℝ) ≤ fEu D lf.chs lf.cvs lf.crs u v := by
+    rcases lt_trichotomy i j with hij | hij | hij
+    · obtain ⟨cert, hc'⟩ := allPairs_sound _ _ hpairs i j hij hj
+      rw [hiA, hjB] at hc'
+      exact pair_sound hcl hR hc' hu0 hu1 hpos hlt hdetAB ht1 ht2 hv
+    · subst hij
+      exfalso; apply hdetAB
+      have : A = B := hiA.symm.trans hjB
+      rw [this, eval_detP]; ring
+    · obtain ⟨cert, hc'⟩ := allPairs_sound _ _ hpairs j i hij hi
+      rw [hiA, hjB] at hc'
+      refine pair_sound hcl hR hc' hu0 hu1 hpos hlt ?_ ht2 ht1 hv
+      rw [detP_swap]; exact neg_ne_zero.mpr hdetAB
+  -- 5. assemble
+  have h1 : fEu D lf.chs lf.cvs lf.crs u v ≤ fEu D lf.chs lf.cvs lf.crs u c := hle
+  have h2 := ptMass_nonneg D pts (sq c θ 1)
+  simp only [fEu] at hW h1
+  linarith
+
 end LemmaELeaf
 
 end SquarePacking
