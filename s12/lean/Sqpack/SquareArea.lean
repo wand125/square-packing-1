@@ -219,6 +219,11 @@ lemma len_le_inv_cos (hc : 0 < Real.cos θ) (x : ℝ) : len c θ x ≤ 1 / Real.
   rw [len, ← upY_sub_lowY hc]
   exact sub_le_sub (min_le_right _ _) (le_max_right _ _)
 
+/-- The slice length is at most `1/sin θ` (the two edges `|X| = ½`). -/
+lemma len_le_inv_sin (hs : 0 < Real.sin θ) (x : ℝ) : len c θ x ≤ 1 / Real.sin θ := by
+  rw [len, ← upX_sub_lowX hs]
+  exact sub_le_sub (min_le_left _ _) (le_max_left _ _)
+
 /-- **The width lemma**: left of the centre the slice length does not decrease. -/
 lemma len_mono (hs : 0 < Real.sin θ) (hc : 0 < Real.cos θ) {x a : ℝ} (hxa : x ≤ a)
     (ha : a ≤ c.1) : len c θ x ≤ len c θ a := by
@@ -372,6 +377,50 @@ theorem cap_le_chord (hs : 0 < Real.sin θ) (hc : 0 < Real.cos θ) {a : ℝ} (ha
         · rcases le_total (len c θ a) 0 with hl | hl
           · rw [ENNReal.ofReal_of_nonpos hl, zero_mul]; exact zero_le
           · rw [ENNReal.ofReal_mul (by linarith), mul_comm]
+
+/-- **The left cap, other plateau**: `|Q ∩ {x < a}| ≤ ĝ(d)` with the roles of `sin θ` and `cos θ`
+exchanged (the slice length is also at most `1/sin θ`).  Used for the bottom cap through `x ↔ y`. -/
+theorem cap_le_ghat' (hs : 0 < Real.sin θ) (hc : 0 < Real.cos θ) (a : ℝ) :
+    volume (sq c θ 1 ∩ {p | p.1 < a}) ≤
+      ENNReal.ofReal (ghat (Real.cos θ) (Real.sin θ) (a - xmin c θ)) := by
+  set x0 := xmin c θ
+  rw [volume_sq_inter_Iio hs hc]
+  have hlin : ∀ x, len c θ x ≤ (x - x0) / (Real.cos θ * Real.sin θ) := fun x => by
+    rw [mul_comm]; exact len_le_lin hs hc x
+  rcases le_or_gt a x0 with ha | ha
+  · have : ∀ x, (Iio a).indicator (fun x => ENNReal.ofReal (len c θ x)) x = 0 := by
+      intro x
+      by_cases hx : x < a
+      · rw [indicator_of_mem (mem_Iio.mpr hx), ENNReal.ofReal_eq_zero]
+        refine le_trans (hlin x) ?_
+        exact div_nonpos_of_nonpos_of_nonneg (by linarith) (mul_pos hc hs).le
+      · exact indicator_of_notMem (by simpa using hx) _
+    simp only [this, lintegral_zero, zero_le]
+  · have hd : 0 ≤ a - x0 := by linarith
+    have hcont : Continuous (capF (Real.cos θ) (Real.sin θ) x0) := by unfold capF; fun_prop
+    calc ∫⁻ x, (Iio a).indicator (fun x => ENNReal.ofReal (len c θ x)) x
+        ≤ ∫⁻ x, (Ioc x0 a).indicator
+            (fun x => ENNReal.ofReal (capF (Real.cos θ) (Real.sin θ) x0 x)) x := by
+          refine lintegral_mono fun x => ?_
+          by_cases hx : x < a
+          · rw [indicator_of_mem (mem_Iio.mpr hx)]
+            by_cases hx0 : x0 < x
+            · rw [indicator_of_mem (mem_Ioc.mpr ⟨hx0, hx.le⟩)]
+              exact ENNReal.ofReal_le_ofReal (le_min (hlin x) (len_le_inv_sin hs x))
+            · rw [ENNReal.ofReal_eq_zero.mpr]
+              · exact zero_le
+              refine le_trans (hlin x) ?_
+              exact div_nonpos_of_nonpos_of_nonneg (by linarith) (mul_pos hc hs).le
+          · rw [indicator_of_notMem (by simpa using hx)]
+            exact zero_le
+      _ = ENNReal.ofReal (∫ x in x0..x0 + (a - x0), capF (Real.cos θ) (Real.sin θ) x0 x) := by
+          rw [lintegral_indicator measurableSet_Ioc, add_sub_cancel,
+            intervalIntegral.integral_of_le ha.le]
+          rw [ofReal_integral_eq_lintegral_ofReal]
+          · exact (hcont.integrableOn_Icc).mono_set Ioc_subset_Icc_self
+          · refine ae_restrict_of_forall_mem measurableSet_Ioc fun x hx => ?_
+            exact le_min (div_nonneg (by linarith [hx.1]) (mul_pos hc hs).le) (by positivity)
+      _ = _ := by rw [integral_capF hc hs x0 _ hd]
 
 end cap
 

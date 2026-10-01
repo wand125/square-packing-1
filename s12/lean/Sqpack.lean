@@ -19,6 +19,7 @@ import Sqpack.S5LowerLeb
 import Sqpack.LemmaZ
 import Sqpack.PolyMin
 import Sqpack.ChordE
+import Sqpack.LebE
 import Sqpack.SegParts
 import Sqpack.ZMTreeM
 import Sqpack.LemmaL
