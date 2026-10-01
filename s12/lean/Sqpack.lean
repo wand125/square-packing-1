@@ -15,6 +15,7 @@ import Sqpack.BoxTree
 import Sqpack.ZMTree
 import Sqpack.CovM
 import Sqpack.CovMP
+import Sqpack.S5LowerLeb
 import Sqpack.SegParts
 import Sqpack.ZMTreeM
 import Sqpack.LemmaL
