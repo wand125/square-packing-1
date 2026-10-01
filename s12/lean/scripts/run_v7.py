@@ -93,7 +93,11 @@ def work(args):
     g = Glue(D, SG, RG, W, MQ)
     body, fails, how = [], [], []
     for n, (_, b, k) in enumerate(leaves_of(tree)):
-        if k in SIMPLE or b[4] == b[5]:
+        if b[4] == b[5]:
+            continue
+        if k == 'LEB' and g.lebOk(b, rects[0]):
+            continue
+        if k in SIMPLE and k != 'LEB':
             continue
         lf, why, Sl, Rl = certify(b)
         how.append(why)
@@ -107,7 +111,7 @@ def work(args):
     if not fails:
         mod = f"R{idx:05d}"
         hdr = ["import Sqpack.V7.Data", "namespace SquarePacking.LemmaELeaf",
-               "open ZMTreeM LemmaEVert LemmaEPoly ZMTree", "set_option maxRecDepth 100000"]
+               "open ZMTreeM LemmaEVert LemmaEPoly ZMTree", "set_option maxRecDepth 100000", "set_option maxHeartbeats 0"]
         txt = "\n".join(hdr + body + [g.root_thm(f"root_{idx:05d}", root, tree, rects),
                                       "end SquarePacking.LemmaELeaf"]) + "\n"
         path = os.path.join(outdir, mod + ".lean")
