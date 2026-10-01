@@ -34,10 +34,24 @@ class Glue:
         return (f"CovT {self.D} {self.S} {self.Mq} {self.R} {self.W} {self.pts} {self.segs} {self.rects} "
                 f"{self.iq(x0)} {self.iq(x1)} {self.iq(y0)} {self.iq(y1)} {self.ir(u0)} {self.ir(u1)}")
 
+    def lebOk(self, box, e):
+        """mirror of `CovMP.lebOk` at the global scale"""
+        D, S, Mq, R, W = self.D, self.S, self.Mq, self.R, self.W
+        x0, x1, y0, y1 = (self.iq(z) for z in box[:4])
+        u0, u1 = self.ir(box[4]), self.ir(box[5])
+        wD, wN = widD(R, u0), widN(R, u0, u1)
+        return (u1 <= R and u0 <= u1 and W <= e[4]
+                and (e[0] == 0 or 2 * e[0] * S * wD + D * S * wN <= 2 * x0 * wD)
+                and (Mq <= e[2] or 2 * x1 * wD + D * S * wN <= 2 * e[2] * S * wD)
+                and (e[1] == 0 or 2 * e[1] * S * wD + D * S * wN <= 2 * y0 * wD)
+                and (Mq <= e[3] or 2 * y1 * wD + D * S * wN <= 2 * e[3] * S * wD))
+
     def leaf(self, box, kind, rects_list):
         dk = "(by decide)"
         if box[4] == box[5]:
             return "CovT.of_degen"
+        if box in self.leaf_names:
+            kind = 'EXACT'
         if kind == 'EMPTY':
             return f"(CovT.of_empty {dk} {dk} {dk} {dk} {dk})"
         if kind == 'SYM':

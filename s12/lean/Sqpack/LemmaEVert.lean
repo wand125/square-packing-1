@@ -632,6 +632,52 @@ def cprod {α : Type*} : List (List α) → List (List α)
   | [] => [[]]
   | l :: ls => l.flatMap fun a => (cprod ls).map (a :: ·)
 
+lemma mem_cprod_iff {α : Type*} : ∀ (L : List (List α)) (c : List α),
+    c ∈ cprod L ↔ List.Forall₂ (fun a l => a ∈ l) c L
+  | [], c => by simp [cprod]
+  | l :: L, c => by
+    simp only [cprod, List.mem_flatMap, List.mem_map]
+    constructor
+    · rintro ⟨a, ha, c', hc', rfl⟩
+      exact List.Forall₂.cons ha ((mem_cprod_iff L c').mp hc')
+    · intro h
+      cases h with
+      | cons ha hrest => exact ⟨_, ha, _, (mem_cprod_iff L _).mpr hrest, rfl⟩
+
+/-- The positions with several alternatives first, the fixed ones last: `sumRF` folds from the
+right, so the sum of the fixed terms is one subterm shared by every combination. -/
+def reord (L : List (List RF)) : List (List RF) :=
+  L.filter (fun l => l.length != 1) ++ L.filter (fun l => l.length == 1)
+
+lemma exists_reord {L : List (List RF)} {c : List RF} (h : c ∈ cprod L) :
+    ∃ c' ∈ cprod (reord L), c'.Perm c := by
+  rw [mem_cprod_iff] at h
+  have key : ∀ (P : List RF → Bool) (L : List (List RF)) (c : List RF),
+      List.Forall₂ (fun a l => a ∈ l) c L →
+      ∃ c1 c2, List.Forall₂ (fun a l => a ∈ l) c1 (L.filter P) ∧
+        List.Forall₂ (fun a l => a ∈ l) c2 (L.filter (fun l => !P l)) ∧ (c1 ++ c2).Perm c := by
+    intro P L c h
+    induction h with
+    | nil => exact ⟨[], [], by simp, by simp, by simp⟩
+    | @cons a l c L ha _ ih =>
+      obtain ⟨c1, c2, h1, h2, hp⟩ := ih
+      cases hP : P l
+      · refine ⟨c1, a :: c2, by simpa [List.filter_cons, hP] using h1, ?_, ?_⟩
+        · have := List.Forall₂.cons (R := fun a l => a ∈ l) ha h2
+          simpa [List.filter_cons, hP] using this
+        · exact (List.perm_middle).trans (List.Perm.cons a hp)
+      · refine ⟨a :: c1, c2, ?_, by simpa [List.filter_cons, hP] using h2, ?_⟩
+        · have := List.Forall₂.cons (R := fun a l => a ∈ l) ha h1
+          simpa [List.filter_cons, hP] using this
+        · exact List.Perm.cons a hp
+  obtain ⟨c1, c2, h1, h2, hp⟩ := key (fun l => l.length != 1) L c h
+  refine ⟨c1 ++ c2, ?_, hp⟩
+  rw [mem_cprod_iff, reord]
+  have e : L.filter (fun l => !(l.length != 1)) = L.filter (fun l => l.length == 1) := by
+    congr 1; funext l; simp [bne]
+  rw [e] at h2
+  exact List.rel_append h1 h2
+
 /-- If each `x_s` is at least some alternative of list `s`, some combination sums to at most
 `Σ x_s`. -/
 lemma exists_comb_le {f : RF → ℝ} :
@@ -1030,9 +1076,9 @@ def vertOk (D W : ℕ) (σ : Bool) (Δ X Y : Poly) (b0 b1 R : ℕ) (chs cvs : Li
       c.hc.all (fun l => l.any fun x => tagOk pat x.2) &&
       c.vc.all (fun l => l.any fun x => tagOk pat x.2) &&
       c.lc.all (fun l => l.1.any (fun a => tagOk pat (capTag a)) && l.2.any (fun a => tagOk pat (capTag a))) &&
-      (cprod (((chs.zip hbx).zip c.hc).map (hAltsP Δ X Y D pat) ++
+      (cprod (reord (((chs.zip hbx).zip c.hc).map (hAltsP Δ X Y D pat) ++
           ((cvs.zip vbx).zip c.vc).map (vAltsP Δ X Y D pat) ++
-          (crs.zip c.lc).map (lAltsP Δ X Y D pat))).all fun comb =>
+          (crs.zip c.lc).map (lAltsP Δ X Y D pat)))).all fun comb =>
         totOk σ Δ X Y b0 b1 R c.splits pat c.fcs (sumRF Δ (comb ++
           (c.splits.zip pat).map (fun x => sproc Δ X Y x.1 x.2) ++ [RF.const (-(W : ℤ)) 1]))
 
@@ -1493,7 +1539,8 @@ theorem vertOk_sound {D W : ℕ} (hD : 0 < D) {σ : Bool} {Δ X Y : Poly} {b0 b1
   obtain ⟨c1, hc1, hs1⟩ := exists_comb_zip (f := fun t => t.eval δ u) _ _ _ hH'
   obtain ⟨c2, hc2, hs2⟩ := exists_comb_zip (f := fun t => t.eval δ u) _ _ _ hV'
   obtain ⟨c3, hc3, hs3⟩ := exists_comb_zip (f := fun t => t.eval δ u) _ _ _ hL'
-  have hcomb := cprod_append _ _ (cprod_append _ _ hc1 hc2) hc3
+  have hcomb0 := cprod_append _ _ (cprod_append _ _ hc1 hc2) hc3
+  obtain ⟨cc, hcomb, hperm⟩ := exists_reord hcomb0
   -- constants
   have dAll : ∀ l ∈ ((chs.zip hbx).zip c.hc).map (hAltsP Δ X Y D pat) ++
       ((cvs.zip vbx).zip c.vc).map (vAltsP Δ X Y D pat) ++
@@ -1516,14 +1563,16 @@ theorem vertOk_sound {D W : ℕ} (hD : 0 < D) {σ : Bool} {Δ X Y : Poly} {b0 b1
     obtain ⟨x, hx, rfl⟩ := List.mem_map.mp hr
     have hs := (List.of_mem_zip hx).1
     exact sproc_d Δ X Y (hsq x.1 hs) (hspd x.1 hs).1 (hspd x.1 hs).2 x.2
-  have hall : ∀ r ∈ c1 ++ c2 ++ c3 ++ (c.splits.zip pat).map (fun x => sproc Δ X Y x.1 x.2) ++
+  have hall : ∀ r ∈ cc ++ (c.splits.zip pat).map (fun x => sproc Δ X Y x.1 x.2) ++
       [RF.const (-(W : ℤ)) 1], r.d ≠ 0 := by
     intro r hr
     rcases List.mem_append.mp hr with hr | hr
     · rcases List.mem_append.mp hr with hr | hr
-      · exact mem_cprod (P := fun r => r.d ≠ 0) _ dAll _ hcomb r hr
+      · exact mem_cprod (P := fun r => r.d ≠ 0) _ dAll _ hcomb0 r (hperm.mem_iff.mp hr)
       · exact dS r hr
     · simp at hr; subst hr; simp [RF.const]
+  have hsumP : ((cc.map fun t => t.eval δ u)).sum = (((c1 ++ c2 ++ c3).map fun t => t.eval δ u)).sum :=
+    (hperm.map _).sum_eq
   have h0 := totOk_sound h hsq (sumRF_d Δ _ (by simpa [List.append_assoc] using hall)) (htot _ hcomb)
   rw [eval_sumRF h.ok h.hΔ _ (by simpa [List.append_assoc] using hall)] at h0
   -- the S-procedure terms are `≤ 0`
@@ -1559,7 +1608,8 @@ theorem vertOk_sound {D W : ℕ} (hD : 0 < D) {σ : Bool} {Δ X Y : Poly} {b0 b1
   rw [z2, z2'] at hs2
   rw [z3] at hs3
   simp only [fE, List.map_append, List.sum_append, List.map_map]
-  simp only [Function.comp_def, List.map_map] at h0 hs1 hs2 hs3 hsp0 ⊢
+  simp only [List.map_append, List.sum_append] at hsumP
+  simp only [Function.comp_def, List.map_map] at h0 hs1 hs2 hs3 hsp0 hsumP ⊢
   push_cast at h0
   linarith
 
