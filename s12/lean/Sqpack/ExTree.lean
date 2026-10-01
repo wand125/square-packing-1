@@ -114,6 +114,26 @@ theorem CovT.scaleR {k : ℕ} (hk : 0 < k)
   intro c u hx0 hx1 hy0 hy1 hu0 hu1 h45 hsub
   exact h c u hx0 hx1 hy0 hy1 (by rw [e]; exact hu0) (by rw [e]; exact hu1) h45 hsub
 
+/-- The converse change of the centre scale. -/
+theorem CovT.scaleS' {k : ℕ} (hk : 0 < k) (h : CovT D S Mq R W pts segs rects x0 x1 y0 y1 u0 u1) :
+    CovT D (S * k) Mq R W pts segs rects (x0 * k) (x1 * k) (y0 * k) (y1 * k) u0 u1 := by
+  have hkr : (k : ℝ) ≠ 0 := by exact_mod_cast hk.ne'
+  have e : ∀ z : ℕ, ((z * k : ℕ) : ℝ) / (D * (S * k : ℕ)) = (z : ℝ) / (D * S) := by
+    intro z; push_cast; field_simp
+  intro c u hx0 hx1 hy0 hy1 hu0 hu1 h45 hsub
+  rw [e] at hx0 hx1 hy0 hy1
+  exact h c u hx0 hx1 hy0 hy1 hu0 hu1 h45 hsub
+
+/-- The converse change of the angle scale. -/
+theorem CovT.scaleR' {k : ℕ} (hk : 0 < k) (h : CovT D S Mq R W pts segs rects x0 x1 y0 y1 u0 u1) :
+    CovT D S Mq (R * k) W pts segs rects x0 x1 y0 y1 (u0 * k) (u1 * k) := by
+  have hkr : (k : ℝ) ≠ 0 := by exact_mod_cast hk.ne'
+  have e : ∀ z : ℕ, ((z * k : ℕ) : ℝ) / ((R * k : ℕ) : ℝ) = (z : ℝ) / R := by
+    intro z; push_cast; exact mul_div_mul_right _ _ hkr
+  intro c u hx0 hx1 hy0 hy1 hu0 hu1 h45 hsub
+  rw [e] at hu0 hu1
+  exact h c u hx0 hx1 hy0 hy1 hu0 hu1 h45 hsub
+
 /-- **`clip_bin`** (`ZMTree.C_cov`): poses with `u > us/R` are inadmissible. -/
 lemma clip_inadm (hD : 0 < D) (hS : 0 < S) (hR : 0 < R) {us : ℕ}
     (h : clipOk (D * S) R x1 y1 u0 u1 us = true) {c : ℝ × ℝ} {u : ℝ}
