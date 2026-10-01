@@ -70,7 +70,8 @@ structure SubBin where
 def sgn (σ : Bool) (p : Poly) : Poly := if σ then p else smul (-1) p
 
 /-- The test of one sub-bin of the pair `(P, Q)`. -/
-def subOk (D W R : ℕ) (side : List PL) (chs cvs : List SegE) (crs : List RectE) (P Q : PL)
+def subOk (D W R : ℕ) (side : List PL) (chs cvs : List SegE) (crs : List RectE)
+    (hbx vbx : List (List ℕ × List ℕ)) (P Q : PL)
     (b0 : ℕ) (sb : SubBin) : Bool :=
   let Δ := detP P Q; let X := xP P Q; let Y := yP P Q
   Nat.blt b0 sb.b1 && signOk sb.σ Δ sb.m b0 sb.b1 R &&
@@ -80,32 +81,36 @@ def subOk (D W R : ℕ) (side : List PL) (chs cvs : List SegE) (crs : List RectE
       let nm := (SL.atV ⟨S, 0, 0, 0, 1⟩ Δ X Y).num
       decide (k < side.length) && (nm.take m).all (· == 0) &&
         checkPos (sgn (!sb.σ) (nm.drop m)) ((nm.drop m).length - 1) b0 sb.b1 R
-    | .val c => vertOk D W sb.σ Δ X Y b0 sb.b1 R chs cvs crs c
+    | .val c => vertOk D W sb.σ Δ X Y b0 sb.b1 R chs cvs crs hbx vbx c
 
 /-- A pair's certificate: parallel, or sub-bins covering `[U0, U1]` in order. -/
 inductive PairCert where
   | par
   | bins (sbs : List SubBin)
 
-def binsOk (D W R : ℕ) (side : List PL) (chs cvs : List SegE) (crs : List RectE) (P Q : PL) :
+def binsOk (D W R : ℕ) (side : List PL) (chs cvs : List SegE) (crs : List RectE)
+    (hbx vbx : List (List ℕ × List ℕ)) (P Q : PL) :
     ℕ → ℕ → List SubBin → Bool
   | b0, U1, [] => b0 == U1
   | b0, U1, sb :: sbs =>
-    subOk D W R side chs cvs crs P Q b0 sb && binsOk D W R side chs cvs crs P Q sb.b1 U1 sbs
+    subOk D W R side chs cvs crs hbx vbx P Q b0 sb &&
+      binsOk D W R side chs cvs crs hbx vbx P Q sb.b1 U1 sbs
 
-def pairOk (D W R U0 U1 : ℕ) (side : List PL) (chs cvs : List SegE) (crs : List RectE) (P Q : PL) :
+def pairOk (D W R U0 U1 : ℕ) (side : List PL) (chs cvs : List SegE) (crs : List RectE)
+    (hbx vbx : List (List ℕ × List ℕ)) (P Q : PL) :
     PairCert → Bool
   | .par => (detP P Q).all (· == 0)
-  | .bins sbs => binsOk D W R side chs cvs crs P Q U0 U1 sbs
+  | .bins sbs => binsOk D W R side chs cvs crs hbx vbx P Q U0 U1 sbs
 
 /-- All pairs `i < j` of a list, the certificates of `L[i]` with the later lines in order. -/
-def allPairsOk (D W R U0 U1 : ℕ) (side : List PL) (chs cvs : List SegE) (crs : List RectE) :
+def allPairsOk (D W R U0 U1 : ℕ) (side : List PL) (chs cvs : List SegE) (crs : List RectE)
+    (hbx vbx : List (List ℕ × List ℕ)) :
     List PL → List (List PairCert) → Bool
   | [], _ => true
   | _ :: _, [] => false
   | P :: Ps, cs :: css =>
-    cs.length == Ps.length && (Ps.zip cs).all (fun q => pairOk D W R U0 U1 side chs cvs crs P q.1 q.2) &&
-      allPairsOk D W R U0 U1 side chs cvs crs Ps css
+    cs.length == Ps.length && (Ps.zip cs).all (fun q => pairOk D W R U0 U1 side chs cvs crs hbx vbx P q.1 q.2) &&
+      allPairsOk D W R U0 U1 side chs cvs crs hbx vbx Ps css
 
 /-! ## 3.  Soundness of the pair certificates -/
 
@@ -121,11 +126,12 @@ noncomputable def fEu (D : ℕ) (chs cvs : List SegE) (crs : List RectE) (u : �
     (chs.map (hsegT (2 * Real.arctan u) D) ++ cvs.map (vsegT (2 * Real.arctan u) D))
     (crs.map (rectT (2 * Real.arctan u) D)) p
 
-lemma binsOk_find {D W R : ℕ} {side : List PL} {chs cvs : List SegE} {crs : List RectE} {P Q : PL}
+lemma binsOk_find {D W R : ℕ} {side : List PL} {chs cvs : List SegE} {crs : List RectE}
+    {hbx vbx : List (List ℕ × List ℕ)} {P Q : PL}
     {u : ℝ} (hR : 0 < R) :
-    ∀ (sbs : List SubBin) (b0 U1 : ℕ), binsOk D W R side chs cvs crs P Q b0 U1 sbs = true →
+    ∀ (sbs : List SubBin) (b0 U1 : ℕ), binsOk D W R side chs cvs crs hbx vbx P Q b0 U1 sbs = true →
       (b0 : ℝ) / R < u → u ≤ (U1 : ℝ) / R →
-      ∃ b0' : ℕ, ∃ sb : SubBin, subOk D W R side chs cvs crs P Q b0' sb = true ∧
+      ∃ b0' : ℕ, ∃ sb : SubBin, subOk D W R side chs cvs crs hbx vbx P Q b0' sb = true ∧
         (b0' : ℝ) / R ≤ u ∧ u ≤ (sb.b1 : ℝ) / R
   | [], b0, U1, h, h0, h1 => by
     simp only [binsOk, beq_iff_eq] at h
@@ -139,11 +145,13 @@ lemma binsOk_find {D W R : ℕ} {side : List PL} {chs cvs : List SegE} {crs : Li
 /-- **One pair**: if two lines of a certified pair meet at a point of the region, the bound holds
 there. -/
 theorem pair_sound {D W R U0 U1 : ℕ} {side : List PL} {chs cvs : List SegE} {crs : List RectE}
+    {hbx vbx : List (List ℕ × List ℕ)}
     (hcl : Claims D chs cvs) (hR : 0 < R) {P Q : PL} {cert : PairCert}
-    (hok : pairOk D W R U0 U1 side chs cvs crs P Q cert = true) {u : ℝ} (hu0 : (U0 : ℝ) / R < u)
+    (hok : pairOk D W R U0 U1 side chs cvs crs hbx vbx P Q cert = true) {u : ℝ} (hu0 : (U0 : ℝ) / R < u)
     (hu1 : u ≤ (U1 : ℝ) / R) (hpos : 0 < u) (hlt : u < 1) {v : ℝ × ℝ}
     (hdet : eval (detP P Q) u ≠ 0) (h1 : aff (evalPL P u) v = 0) (h2 : aff (evalPL Q u) v = 0)
-    (hv : v ∈ poly (side.map (evalPL · u))) :
+    (hv : v ∈ poly (side.map (evalPL · u)))
+    (hbd : ∀ p ∈ poly (side.map (evalPL · u)), BoxDom D u p chs cvs hbx vbx) :
     (W : ℝ) ≤ fEu D chs cvs crs u v := by
   cases cert with
   | par =>
@@ -201,13 +209,14 @@ theorem pair_sound {D W R U0 U1 : ℕ} {side : List PL} {chs cvs : List SegE} {c
       linarith
     · rw [hsbk] at hk
       rw [hv']
-      exact vertOk_sound hcl.hD ctx hcl.hch hcl.hcv hk
+      exact vertOk_sound hcl.hD ctx hcl.hch hcl.hcv (by rw [← hv']; exact hbd v hv) hk
 
 /-- **All pairs**: every pair `i < j` of the list has a passing certificate. -/
-lemma allPairs_sound {D W R U0 U1 : ℕ} {side : List PL} {chs cvs : List SegE} {crs : List RectE} :
-    ∀ (L : List PL) (css : List (List PairCert)), allPairsOk D W R U0 U1 side chs cvs crs L css = true →
+lemma allPairs_sound {D W R U0 U1 : ℕ} {side : List PL} {chs cvs : List SegE} {crs : List RectE}
+    {hbx vbx : List (List ℕ × List ℕ)} :
+    ∀ (L : List PL) (css : List (List PairCert)), allPairsOk D W R U0 U1 side chs cvs crs hbx vbx L css = true →
       ∀ (i j : ℕ) (hi : i < j) (hj : j < L.length),
-        ∃ c, pairOk D W R U0 U1 side chs cvs crs (L[i]'(by omega)) (L[j]) c = true
+        ∃ c, pairOk D W R U0 U1 side chs cvs crs hbx vbx (L[i]'(by omega)) (L[j]) c = true
   | [], _, _, i, j, _, hj => absurd hj (by simp)
   | _ :: _, [], h, _, _, _, _ => by simp [allPairsOk] at h
   | P :: Ps, cs :: css, h, i, j, hij, hj => by
@@ -411,6 +420,47 @@ lemma formsSL_match {u : ℝ} (hu0 : 0 < u) (hu1 : u < 1) {A B : ℝ} {lo1 lo2 u
   · right; right; right; right; right; right; left; exact ⟨Nat.mul_ne_zero d4 d1, fun c => by rw [aff_subF, val_sub _ _ d4 d1 hu0 hu1, e4, e1]⟩
   · right; right; right; right; right; right; right; exact ⟨Nat.mul_ne_zero d4 d2, fun c => by rw [aff_subF, val_sub _ _ d4 d2 hu0 hu1, e4, e2]⟩
 
+/-- Box-wide dominance of a segment's alternatives: checked at the region's corners. -/
+def boxDomOk (Q x0 x1 y0 y1 U0 U1 R : ℕ) (wx wy : Bool) (ups los : List SL) (bx : List ℕ × List ℕ) :
+    Bool :=
+  ups.all (fun U => bx.1.any fun a =>
+      cornersOk Q x0 x1 y0 y1 U0 U1 R wx wy false (U.sub (ups.getD a (SL.cst 0 1))).P) &&
+    los.all (fun L => bx.2.any fun b =>
+      cornersOk Q x0 x1 y0 y1 U0 U1 R wx wy false ((los.getD b (SL.cst 0 1)).sub L).P)
+
+lemma getD_d {ups : List SL} (hd : ∀ L ∈ ups, L.d ≠ 0) (a : ℕ) : (ups.getD a (SL.cst 0 1)).d ≠ 0 := by
+  by_cases h : a < ups.length
+  · exact hd _ (getD_mem _ h)
+  · rw [List.getD_eq_default _ _ (by omega)]; simp [SL.cst]
+
+lemma boxDom_sound {Q x0 x1 y0 y1 U0 U1 R : ℕ} (hQ : 0 < Q) (hR : 0 < R) {wx wy : Bool}
+    {ups los : List SL} {bx : List ℕ × List ℕ}
+    (hok : boxDomOk Q x0 x1 y0 y1 U0 U1 R wx wy ups los bx = true)
+    (hdu : ∀ L ∈ ups, L.d ≠ 0) (hdl : ∀ L ∈ los, L.d ≠ 0) {u : ℝ} (hu0 : 0 < u) (hu1 : u < 1)
+    (hb0 : (U0 : ℝ) / R ≤ u) (hb1 : u ≤ (U1 : ℝ) / R) :
+    ∀ p ∈ poly ((sideL Q x0 x1 y0 y1 wx wy).map (evalPL · u)), DomU u p ups bx.1 ∧ DomL u p los bx.2 := by
+  intro p hp
+  simp only [boxDomOk, Bool.and_eq_true, List.all_eq_true, List.any_eq_true] at hok
+  refine ⟨fun U hU => ?_, fun L hL => ?_⟩
+  · obtain ⟨a, ha, hc⟩ := hok.1 U hU
+    have h0 := corners_sound hQ hR hc hu0 hu1 hb0 hb1 p hp
+    simp only [Bool.false_eq_true, if_false] at h0
+    have hd1 := hdu U hU
+    have hd2 := getD_d hdu a
+    have hsd := sden_pos (U.sub (ups.getD a (SL.cst 0 1))) (Nat.mul_ne_zero hd1 hd2) hu0 hu1
+    have hv : 0 ≤ (U.sub (ups.getD a (SL.cst 0 1))).val u p := div_nonneg h0 hsd.le
+    rw [val_sub _ _ hd1 hd2 hu0 hu1] at hv
+    exact ⟨a, ha, by linarith⟩
+  · obtain ⟨b, hb, hc⟩ := hok.2 L hL
+    have h0 := corners_sound hQ hR hc hu0 hu1 hb0 hb1 p hp
+    simp only [Bool.false_eq_true, if_false] at h0
+    have hd1 := getD_d hdl b
+    have hd2 := hdl L hL
+    have hsd := sden_pos ((los.getD b (SL.cst 0 1)).sub L) (Nat.mul_ne_zero hd1 hd2) hu0 hu1
+    have hv : 0 ≤ ((los.getD b (SL.cst 0 1)).sub L).val u p := div_nonneg h0 hsd.le
+    rw [val_sub _ _ hd1 hd2 hu0 hu1] at hv
+    exact ⟨b, hb, by linarith⟩
+
 /-! ## 5.  The `EXACT` leaf -/
 
 /-- The data of a leaf: the lower sides (`wx`, `wy`: wall or box side), the claims, the lines of
@@ -422,6 +472,8 @@ structure ExLeaf where
   cvs : List SegE
   crs : List RectE
   Ls : List PL
+  hbx : List (List ℕ × List ℕ)
+  vbx : List (List ℕ × List ℕ)
   certs : List (List PairCert)
 
 def hFormsSLs (D : ℕ) (e : SegE) : List SL :=
@@ -445,7 +497,12 @@ def exOk (D S R W x0 x1 y0 y1 U0 U1 : ℕ) (segs : List SegE) (rects : List Rect
       Nat.ble (2 * x1 * widD R U0 + D * S * widN R U0 U1) (2 * r.2.2.1 * S * widD R U0) &&
       Nat.ble (2 * y1 * widD R U0 + D * S * widN R U0 U1) (2 * r.2.2.2.1 * S * widD R U0) &&
       (lebSLs D r).all pin) &&
-    allPairsOk D W R U0 U1 side lf.chs lf.cvs lf.crs (side ++ lf.Ls) lf.certs
+    lf.hbx.length == lf.chs.length && lf.vbx.length == lf.cvs.length &&
+    (lf.chs.zip lf.hbx).all (fun q => boxDomOk (D * S) x0 x1 y0 y1 U0 U1 R lf.wx lf.wy
+      (hUps D q.1) (hLos D q.1) q.2) &&
+    (lf.cvs.zip lf.vbx).all (fun q => boxDomOk (D * S) x0 x1 y0 y1 U0 U1 R lf.wx lf.wy
+      (vUps D q.1) (vLos D q.1) q.2) &&
+    allPairsOk D W R U0 U1 side lf.chs lf.cvs lf.crs lf.hbx lf.vbx (side ++ lf.Ls) lf.certs
 
 lemma pinned_of_formsSL {Q x0 x1 y0 y1 U0 U1 R : ℕ} (hQ : 0 < Q) (hR : 0 < R) {wx wy : Bool}
     {Ls : List PL} {u : ℝ} (hu0 : 0 < u) (hu1 : u < 1) (hb0 : (U0 : ℝ) / R ≤ u)
@@ -464,7 +521,7 @@ theorem CovMPo.of_exact {D S Mq R W x0 x1 y0 y1 U0 U1 : ℕ} {pts : List (ℕ ×
     CovMPo D S Mq R W pts segs rects x0 x1 y0 y1 U0 U1 := by
   simp only [exOk, Bool.and_eq_true, Nat.blt_eq, Nat.ble_eq, decide_eq_true_eq, List.all_eq_true,
     beq_iff_eq, List.contains_iff_mem] at h
-  obtain ⟨⟨⟨⟨⟨⟨⟨hU1, hU01⟩, hnd⟩, hcr⟩, hch⟩, hcv⟩, hcrs⟩, hpairs⟩ := h
+  obtain ⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨hU1, hU01⟩, hnd⟩, hcr⟩, hch⟩, hcv⟩, hcrs⟩, lhb⟩, lvb⟩, hhb⟩, hvb⟩, hpairs⟩ := h
   intro c u hx0 hx1 hy0 hy1 hu0 hu1 hbox
   have hQ : 0 < D * S := Nat.mul_pos hD hS
   have hRr : (0 : ℝ) < R := by exact_mod_cast hR
@@ -592,20 +649,26 @@ theorem CovMPo.of_exact {D S Mq R W x0 x1 y0 y1 U0 U1 : ℕ} {pts : List (ℕ ×
   obtain ⟨i, hi, hiA⟩ := List.mem_iff_getElem.mp hA
   obtain ⟨j, hj, hjB⟩ := List.mem_iff_getElem.mp hB
   have hdetAB : eval (detP A B) u ≠ 0 := by rw [eval_detP]; exact hdet
+  have hbd : ∀ p ∈ poly ((sideL (D * S) x0 x1 y0 y1 lf.wx lf.wy).map (evalPL · u)),
+      BoxDom D u p lf.chs lf.cvs lf.hbx lf.vbx := by
+    intro p hp
+    refine ⟨fun q hq => ?_, fun q hq => ?_⟩
+    · exact boxDom_sound hQ hR (hhb q hq) (hd_hUps hD q.1) (hd_hLos hD q.1) hpos hlt hb0 hu1 p hp
+    · exact boxDom_sound hQ hR (hvb q hq) (hd_vUps hD q.1) (hd_vLos hD q.1) hpos hlt hb0 hu1 p hp
   have hcl : Claims D lf.chs lf.cvs :=
     ⟨hD, fun e he => (hch e he).1.2, fun e he => (hcv e he).1.2⟩
   have hW : (W : ℝ) ≤ fEu D lf.chs lf.cvs lf.crs u v := by
     rcases lt_trichotomy i j with hij | hij | hij
     · obtain ⟨cert, hc'⟩ := allPairs_sound _ _ hpairs i j hij hj
       rw [hiA, hjB] at hc'
-      exact pair_sound hcl hR hc' hu0 hu1 hpos hlt hdetAB ht1 ht2 hv
+      exact pair_sound hcl hR hc' hu0 hu1 hpos hlt hdetAB ht1 ht2 hv hbd
     · subst hij
       exfalso; apply hdetAB
       have : A = B := hiA.symm.trans hjB
       rw [this, eval_detP]; ring
     · obtain ⟨cert, hc'⟩ := allPairs_sound _ _ hpairs j i hij hi
       rw [hiA, hjB] at hc'
-      refine pair_sound hcl hR hc' hu0 hu1 hpos hlt ?_ ht2 ht1 hv
+      refine pair_sound hcl hR hc' hu0 hu1 hpos hlt ?_ ht2 ht1 hv hbd
       rw [detP_swap]; exact neg_ne_zero.mpr hdetAB
   -- 5. assemble
   have h1 : fEu D lf.chs lf.cvs lf.crs u v ≤ fEu D lf.chs lf.cvs lf.crs u c := hle
