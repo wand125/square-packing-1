@@ -92,49 +92,98 @@ class Leaf:
         return Ls
 
     # -------------------------------------------------------------- one sub-bin of a pair
-    def choose(self, Dp, X, Y, b0, b1, lam=(1, 1)):
-        """float-guided choices at the vertex: per segment ('drop',) / ('box',) / ('alt', Ua, La),
-        per rectangle the cap modes"""
+    def choose(self, Dp, X, Y, b0, b1):
+        """float-guided certificate at the vertex: (splits, fcs, hc, vc, lc)"""
         R = self.R
-        ts = (0.0, 0.25, 0.5, 0.75, 1.0)
+        ts = (0.0, 0.1, 0.25, 0.5, 0.75, 0.9, 1.0)
         us = [max(b0 / R + (b1 - b0) / R * t, 1e-9) for t in ts]
         pts = []
         for u in us:
             dv = ev(Dp, u)
             pts.append((u, (ev(X, u) / dv, ev(Y, u) / dv)))
-        tol = 1e-9
-        def pick(ups, los, bx):
-            Ua, La, pos = set(), set(), False
-            for u, v in pts:
-                uv = [svals(L, u, v) for L in ups]; lv = [svals(L, u, v) for L in los]
-                mu = min(uv); ml = max(lv)
-                Ua |= {i for i in range(3) if uv[i] <= mu + tol}
-                La |= {i for i in range(3) if lv[i] >= ml - tol}
-                if mu - ml > 1e-12: pos = True
-            if not pos: return ('drop',)
-            if len(bx[0]) * len(bx[1]) <= len(Ua) * len(La): return ('box',)
-            return ('alt', sorted(Ua), sorted(La))
-        hc = [pick(hUps(self.D, e), hLos(self.D, e), bx) for e, bx in zip(self.chs, self.hbx)]
-        vc = [pick(vUps(self.D, e), vLos(self.D, e), bx) for e, bx in zip(self.cvs, self.vbx)]
-        lc = []
+        splits, lc = [], []
+        def qsign(q):
+            return [svals(q, u, v) >= 0 for u, v in pts]
         for r in self.crs:
-            modes = []
+            pair = []
             for cap in (capX(self.D, r[0]), capY(self.D, r[1])):
                 ds = [svals(cap, u, v) for u, v in pts]
                 ss = [2 * u / (1 + u * u) for u, _ in pts]
-                if all(d <= 0 for d in ds): modes.append(('zero',))
-                elif all(d >= s for d, s in zip(ds, ss)): modes.append(('lin',))
-                elif all(0 <= d <= s for d, s in zip(ds, ss)): modes.append(('par',))
-                elif any(d < 0 for d in ds): modes.append(('zp', 0, 1, lam[0], lam[1]))
-                else: modes.append(('pl', lam[0], lam[1], 0, 1))
-            lc.append(tuple(modes))
-        ncomb = 1
-        for o, bx in zip(hc + vc, self.hbx + self.vbx):
-            if o[0] == 'box': ncomb *= len(bx[0]) * len(bx[1])
-            elif o[0] == 'alt': ncomb *= len(o[1]) * len(o[2])
-        for mx, my in lc:
-            ncomb *= (2 if mx[0] in ('zp', 'pl') else 1) * (2 if my[0] in ('zp', 'pl') else 1)
-        return hc, vc, lc, ncomb
+                if all(d <= 0 for d in ds): pair.append([('zeroC',)])
+                elif all(d >= s for d, s in zip(ds, ss)): pair.append([('linC',)])
+                elif all(0 <= d <= s for d, s in zip(ds, ss)): pair.append([('par',)])
+                elif any(d < 0 for d in ds):
+                    k = len(splits); splits.append((cap, 0, 1, 0, 1))
+                    pair.append([('zeroT', k), ('parT', k, True)])
+                else:
+                    k = len(splits); splits.append((sl_sub(cap, sSL(1)), 0, 1, 0, 1))
+                    pair.append([('parT', k, False), ('linT', k)])
+            lc.append(tuple(pair))
+        tol = 1e-9
+        def pick(ups, los, bx):
+            Ua, La, posl = set(), set(), []
+            for u, v in pts:
+                uv = [svals(L, u, v) for L in ups]; lv = [svals(L, u, v) for L in los]
+                mu = min(uv); ml = max(lv)
+                posl.append(mu - ml > 1e-12)
+                if mu - ml > -1e-6:
+                    Ua |= {i for i in range(3) if uv[i] <= mu + tol}
+                    La |= {i for i in range(3) if lv[i] >= ml - tol}
+            if not any(posl): return [(('drop',), None)]
+            ch = ('box',) if len(bx[0]) * len(bx[1]) <= len(Ua) * len(La) else ('alt', sorted(Ua), sorted(La))
+            if all(posl): return [(ch, None)]
+            # mixed: tag by a split whose sign pattern matches
+            for k, sp in enumerate(splits):
+                sg = qsign(sp[0])
+                if sg == posl: return [(('drop',), (k, False)), (ch, (k, True))]
+                if [not x for x in sg] == posl: return [(('drop',), (k, True)), (ch, (k, False))]
+            return [(('drop',), None), (ch, None)]
+        hc = [pick(hUps(self.D, e), hLos(self.D, e), bx) for e, bx in zip(self.chs, self.hbx)]
+        vc = [pick(vUps(self.D, e), vLos(self.D, e), bx) for e, bx in zip(self.cvs, self.vbx)]
+        return [splits, [], hc, vc, lc]
+
+    def factor_certs(self, sig, Dp, X, Y, b0, b1, cert):
+        """common-factor certificates for the failing combinations (sympy gcd)"""
+        import sympy
+        splits, fcs, hc, vc, lc = cert
+        uu = sympy.Symbol('u')
+        def topoly(p): return sympy.Poly(list(reversed(p)) or [0], uu)
+        def tolist(P):
+            c = P.all_coeffs(); return [int(x) for x in reversed(c)]
+        out = []
+        for k, sp in enumerate(splits):
+            sq = snum(sig, atV(sp[0], Dp, X, Y))
+            Pq = topoly(sq)
+            if Pq.is_zero: continue
+            # gcd with a few failing totals: use the full sum with each pattern's first combination
+            for pat in pats(len(splits)):
+                alts = []
+                for e, bx, l in zip(self.chs, self.hbx, hc):
+                    alts.append([t for x in l if tagOk(pat, x[1]) for t in segCAlts(Dp, X, Y, e[4], self.D, nat_sub(e[2], e[0]), hUps(self.D, e), hLos(self.D, e), bx, x[0])])
+                for e, bx, l in zip(self.cvs, self.vbx, vc):
+                    alts.append([t for x in l if tagOk(pat, x[1]) for t in segCAlts(Dp, X, Y, e[4], self.D, nat_sub(e[3], e[1]), vUps(self.D, e), vLos(self.D, e), bx, x[0])])
+                for r, (xs, ys) in zip(self.crs, lc):
+                    alts.append([lebRF(Dp, X, Y, self.D, r, ax, ay) for ax in xs if tagOk(pat, capTag(ax)) for ay in ys if tagOk(pat, capTag(ay))])
+                sps = [sproc(Dp, X, Y, s_, b) for s_, b in zip(splits, pat)]
+                for comb in cprod(alts):
+                    T = sumRF(Dp, comb + sps + [rf_const(-self.W, 1)])
+                    if ckRF(sig, T, b0, b1, self.R): continue
+                    G = sympy.gcd(topoly(snum(sig, T)), Pq)
+                    if G.degree() < 1: continue
+                    G = sympy.Poly(sympy.primitive(G.as_expr())[1], uu)
+                    Gl = tolist(G)
+                    g1P, rem = sympy.div(Pq, G)
+                    if not rem.is_zero: continue
+                    g1 = tolist(g1P)
+                    if not all(isinstance(x, int) for x in g1): continue
+                    m = 0
+                    while m < len(g1) and g1[m] == 0: m += 1
+                    for sgn in (1, -1):
+                        gg = [sgn * x for x in g1]; GG = [sgn * x for x in Gl]
+                        if checkPos(gg[m:], nat_sub(len(gg[m:]), 1), b0, b1, self.R):
+                            f = (k, GG, gg, m)
+                            if f not in out: out.append(f)
+        return out
 
     def sub(self, P, Qp, b0, b1, depth):
         """certificates for [b0, b1] (list of sub-bins), or None"""
@@ -153,14 +202,18 @@ class Leaf:
                 if checkPos(q2, nat_sub(len(nm[mm:]), 1), b0, b1, R):
                     self.stat['out'] += 1
                     return [(b1, sig, m, ('out', k, mm))]
-            for lam in ((1, 1), (1, 8), (1, 64)):
-                hc, vc, lc, ncomb = self.choose(Dp, X, Y, b0, b1, lam)
-                if ncomb <= 128 and vertOk(self.D, self.W, sig, Dp, X, Y, b0, b1, R, self.chs, self.cvs,
-                                           self.crs, self.hbx, self.vbx, hc, vc, lc):
-                    self.stat['val'] += 1
-                    return [(b1, sig, m, ('val', hc, vc, lc))]
-                if not any(mx[0] in ('zp', 'pl') or my[0] in ('zp', 'pl') for mx, my in lc):
-                    break
+            cert = self.choose(Dp, X, Y, b0, b1)
+            args = (self.D, self.W, sig, Dp, X, Y, b0, b1, R, self.chs, self.cvs, self.crs, self.hbx, self.vbx)
+            if vertOk(*args, cert):
+                self.stat['val'] += 1
+                return [(b1, sig, m, ('val', cert))]
+            if cert[0]:
+                fcs = self.factor_certs(sig, Dp, X, Y, b0, b1, cert)
+                if fcs:
+                    cert[1] = fcs
+                    if vertOk(*args, cert):
+                        self.stat['val'] += 1; self.stat['fc'] = self.stat.get('fc', 0) + 1
+                        return [(b1, sig, m, ('val', cert))]
         if depth >= self.maxdepth or b1 - b0 < 2:
             return None
         mid = (b0 + b1) // 2
@@ -233,16 +286,35 @@ def lnat(xs):
 def lsegc(o):
     if o[0] == 'drop': return ".drop"
     if o[0] == 'box': return ".box"
-    return f".alt {lnat(o[1])} {lnat(o[2])}"
+    return f"(.alt {lnat(o[1])} {lnat(o[2])})"
 
 
-def lcap(m):
-    if m[0] in ('zero', 'par', 'lin'): return "." + m[0]
-    return f"(.{m[0]} {m[1]} {m[2]} {m[3]} {m[4]})"
+def ltag(t):
+    return "none" if t is None else f"some ({t[0]}, {'true' if t[1] else 'false'})"
+
+
+def lcapa(a):
+    if a[0] in ('zeroC', 'par', 'linC'): return "." + a[0]
+    if a[0] == 'parT': return f"(.parT {a[1]} {'true' if a[2] else 'false'})"
+    return f"(.{a[0]} {a[1]})"
+
+
+def lSL(L):
+    return f"⟨{lPL(L[0])}, {L[1]}, {L[2]}, {L[3]}, {L[4]}⟩"
 
 
 def lbx(b):
     return f"({lnat(b[0])}, {lnat(b[1])})"
+
+
+def lvcert(c):
+    splits, fcs, hc, vc, lc = c
+    sp = ", ".join(f"⟨{lSL(q)}, {nm}, {dm}, {np_}, {dp}⟩" for q, nm, dm, np_, dp in splits)
+    fc = ", ".join(f"⟨{k}, {lpoly(G)}, {lpoly(g1)}, {m}⟩" for k, G, g1, m in fcs)
+    h = ", ".join("[" + ", ".join(f"({lsegc(x[0])}, {ltag(x[1])})" for x in l) + "]" for l in hc)
+    v = ", ".join("[" + ", ".join(f"({lsegc(x[0])}, {ltag(x[1])})" for x in l) + "]" for l in vc)
+    l_ = ", ".join(f"([{', '.join(lcapa(a) for a in xs)}], [{', '.join(lcapa(a) for a in ys)}])" for xs, ys in lc)
+    return f"⟨[{sp}], [{fc}], [{h}], [{v}], [{l_}]⟩"
 
 
 def lsub(sb):
@@ -250,9 +322,7 @@ def lsub(sb):
     if kind[0] == 'out':
         k = f".out {kind[1]} {kind[2]}"
     else:
-        _, hc, vc, lc = kind
-        k = (".val ⟨[" + ", ".join(lsegc(o) for o in hc) + "], [" + ", ".join(lsegc(o) for o in vc) +
-             "], [" + ", ".join(f"({lcap(a)}, {lcap(b)})" for a, b in lc) + "]⟩")
+        k = f"(.val {lvcert(kind[1])})"
     return f"⟨{b1}, {'true' if sig else 'false'}, {m}, {k}⟩"
 
 

@@ -344,6 +344,7 @@ def sproc(D, X, Y, sp, b):
 # CapA: ('zeroC',) | ('zeroT', k) | ('par',) | ('linC',) | ('linT', k)
 def capTag(a):
     if a[0] == 'zeroT': return (a[1], False)
+    if a[0] == 'parT': return (a[1], a[2])
     if a[0] == 'linT': return (a[1], True)
     return None
 
@@ -351,13 +352,14 @@ def capTag(a):
 def capAOk(sigma, D, X, Y, b0, b1, R, splits, cap, a):
     if a[0] == 'zeroC': return ghOk(sigma, D, X, Y, b0, b1, R, cap, 0)
     if a[0] == 'par': return True
+    if a[0] == 'parT': return a[1] < len(splits)
     if a[0] == 'linC': return ghOk(sigma, D, X, Y, b0, b1, R, cap, 2)
     if a[0] == 'zeroT': return a[1] < len(splits) and splitAt(splits, a[1]) == cap
     return a[1] < len(splits) and splitAt(splits, a[1]) == sl_sub(cap, sSL(1))
 
 
 def capAU(D, X, Y, cap, a):
-    return ghU(D, X, Y, cap, {'zeroC': 0, 'zeroT': 0, 'par': 1, 'linC': 2, 'linT': 2}[a[0]])
+    return ghU(D, X, Y, cap, {'zeroC': 0, 'zeroT': 0, 'par': 1, 'parT': 1, 'linC': 2, 'linT': 2}[a[0]])
 
 
 def lebRF(D, X, Y, Dn, r, ax, ay):
