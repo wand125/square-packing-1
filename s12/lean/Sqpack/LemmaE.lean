@@ -96,11 +96,21 @@ noncomputable def fE (s co : ℝ) (sts : List SegT) (lts : List LebT) (p : ℝ �
 def PosMul (Ls : List (ℝ × ℝ × ℝ)) (F : ℝ × ℝ × ℝ) : Prop :=
   ∃ L ∈ Ls, ∃ k : ℝ, 0 < k ∧ ∀ p, aff F p = k * aff L p
 
-/-- Every form of every term is fixed in sign on the cells of `Ls` (and the weights are `≥ 0`). -/
-def Fixed (s : ℝ) (Ls : List (ℝ × ℝ × ℝ)) (sts : List SegT) (lts : List LebT) : Prop :=
-  (∀ t ∈ sts, 0 ≤ t.1 ∧ 0 ≤ t.2.1 ∧ ∀ F ∈ t.2.2, PosMul Ls F) ∧
-    (∀ l ∈ lts, 0 ≤ l.1 ∧ PosMul Ls l.2.1 ∧ PosMul Ls (subF l.2.1 (constF s)) ∧
-      PosMul Ls l.2.2 ∧ PosMul Ls (subF l.2.2 (constF s)))
+/-- `F` has a fixed sign on the set `R`. -/
+def SignOn (R : Set (ℝ × ℝ)) (F : ℝ × ℝ × ℝ) : Prop :=
+  (∀ p ∈ R, 0 ≤ aff F p) ∨ (∀ p ∈ R, aff F p ≤ 0)
+
+/-- `F` is a positive multiple of a line of `Ls`, or has a fixed sign on the whole region `R`. -/
+def Pinned (R : Set (ℝ × ℝ)) (Ls : List (ℝ × ℝ × ℝ)) (F : ℝ × ℝ × ℝ) : Prop :=
+  PosMul Ls F ∨ SignOn R F
+
+/-- Every form of every term is fixed in sign on the cells of `Ls` inside `R` (and the weights are
+`≥ 0`). -/
+def Fixed (R : Set (ℝ × ℝ)) (s : ℝ) (Ls : List (ℝ × ℝ × ℝ)) (sts : List SegT) (lts : List LebT) :
+    Prop :=
+  (∀ t ∈ sts, 0 ≤ t.1 ∧ 0 ≤ t.2.1 ∧ ∀ F ∈ t.2.2, Pinned R Ls F) ∧
+    (∀ l ∈ lts, 0 ≤ l.1 ∧ Pinned R Ls l.2.1 ∧ Pinned R Ls (subF l.2.1 (constF s)) ∧
+      Pinned R Ls l.2.2 ∧ Pinned R Ls (subF l.2.2 (constF s)))
 
 /-- The line `L` oriented to be `≥ 0` at `c`. -/
 noncomputable def orient (c : ℝ × ℝ) (L : ℝ × ℝ × ℝ) : ℝ × ℝ × ℝ :=
@@ -133,9 +143,15 @@ lemma sign_fixed {side Ls : List (ℝ × ℝ × ℝ)} (c : ℝ × ℝ) {L : ℝ 
     have := hp _ hmem
     rw [← aff_eq_val, aff_orient, if_neg h] at this; linarith
 
-lemma sign_of_posMul {K : Set (ℝ × ℝ)} {Ls : List (ℝ × ℝ × ℝ)} {F : ℝ × ℝ × ℝ}
-    (hsign : ∀ L ∈ Ls, (∀ p ∈ K, 0 ≤ aff L p) ∨ (∀ p ∈ K, aff L p ≤ 0)) (h : PosMul Ls F) :
+lemma sign_of_posMul {K R : Set (ℝ × ℝ)} (hKR : K ⊆ R) {Ls : List (ℝ × ℝ × ℝ)}
+    {F : ℝ × ℝ × ℝ}
+    (hsign : ∀ L ∈ Ls, (∀ p ∈ K, 0 ≤ aff L p) ∨ (∀ p ∈ K, aff L p ≤ 0)) (h : Pinned R Ls F) :
     (∀ p ∈ K, 0 ≤ aff F p) ∨ (∀ p ∈ K, aff F p ≤ 0) := by
+  rcases h with h | h
+  swap
+  · rcases h with h | h
+    · exact Or.inl fun p hp => h p (hKR hp)
+    · exact Or.inr fun p hp => h p (hKR hp)
   obtain ⟨L, hL, k, hk, hF⟩ := h
   rcases hsign L hL with h | h
   · left; intro p hp; rw [hF]; exact mul_nonneg hk.le (h p hp)
@@ -151,21 +167,22 @@ lemma concaveOn_list_sum {ι : Type*} (K : Set (ℝ × ℝ)) (hK : Convex ℝ K)
     exact (hf a List.mem_cons_self).add (ih fun i hi => hf i (List.mem_cons_of_mem _ hi))
 
 /-- `fE` is concave on every cell. -/
-theorem concaveOn_fE {s co : ℝ} (hs : 0 < s) (hc : 0 < co) {Ls : List (ℝ × ℝ × ℝ)}
-    {sts : List SegT} {lts : List LebT} (hfix : Fixed s Ls sts lts) (K : Set (ℝ × ℝ))
-    (hK : Convex ℝ K) (hsign : ∀ L ∈ Ls, (∀ p ∈ K, 0 ≤ aff L p) ∨ (∀ p ∈ K, aff L p ≤ 0)) :
+theorem concaveOn_fE {s co : ℝ} (hs : 0 < s) (hc : 0 < co) {R : Set (ℝ × ℝ)}
+    {Ls : List (ℝ × ℝ × ℝ)} {sts : List SegT} {lts : List LebT} (hfix : Fixed R s Ls sts lts)
+    (K : Set (ℝ × ℝ)) (hKR : K ⊆ R) (hK : Convex ℝ K)
+    (hsign : ∀ L ∈ Ls, (∀ p ∈ K, 0 ≤ aff L p) ∨ (∀ p ∈ K, aff L p ≤ 0)) :
     ConcaveOn ℝ K (fE s co sts lts) := by
   obtain ⟨h1, h2⟩ := hfix
   refine (concaveOn_list_sum K hK sts _ fun t ht => ?_).add
     (concaveOn_list_sum K hK lts _ fun l hl => ?_)
   · obtain ⟨hk, hM, hF⟩ := h1 t ht
     exact (concaveOn_max0_clampMin K hK hM t.2.2 fun F hFm =>
-      sign_of_posMul hsign (hF F hFm)).smul hk
+      sign_of_posMul hKR hsign (hF F hFm)).smul hk
   · obtain ⟨hρ, hx, hx', hy, hy'⟩ := h2 l hl
-    have sx := sign_of_posMul hsign hx
-    have sx' := sign_of_posMul hsign hx'
-    have sy := sign_of_posMul hsign hy
-    have sy' := sign_of_posMul hsign hy'
+    have sx := sign_of_posMul hKR hsign hx
+    have sx' := sign_of_posMul hKR hsign hx'
+    have sy := sign_of_posMul hKR hsign hy
+    have sy' := sign_of_posMul hKR hsign hy'
     have cx := convexOn_ghat K hK hs hc l.2.1 (Or.symm sx) (by
       rcases sx' with h | h
       · right; intro p hp; have := h p hp; simp only [aff_subF, aff_constF] at this; linarith
@@ -180,7 +197,7 @@ theorem concaveOn_fE {s co : ℝ} (hs : 0 < s) (hc : 0 < co) {Ls : List (ℝ × 
 point is at least its value at some vertex of the arrangement of `side ++ Ls` inside the region. -/
 theorem exists_vertex_le_fE {s co : ℝ} (hs : 0 < s) (hc : 0 < co) {side Ls : List (ℝ × ℝ × ℝ)}
     (hb : Bornology.IsBounded (poly side)) {sts : List SegT} {lts : List LebT}
-    (hfix : Fixed s Ls sts lts) {c : ℝ × ℝ} (hcs : c ∈ poly side) :
+    (hfix : Fixed (poly side) s Ls sts lts) {c : ℝ × ℝ} (hcs : c ∈ poly side) :
     ∃ v ∈ poly side, (∃ C1 ∈ side ++ Ls, ∃ C2 ∈ side ++ Ls, C1.1 * C2.2.1 - C1.2.1 * C2.1 ≠ 0 ∧
       aff C1 v = 0 ∧ aff C2 v = 0) ∧ fE s co sts lts v ≤ fE s co sts lts c := by
   set cs := side ++ Ls.map (orient c)
@@ -192,7 +209,7 @@ theorem exists_vertex_le_fE {s co : ℝ} (hs : 0 < s) (hc : 0 < co) {side Ls : L
     · obtain ⟨L, _, rfl⟩ := List.mem_map.mp h
       rw [← aff_eq_val, aff_orient]
       split_ifs with h' <;> [exact h'; linarith]
-  have hconc := concaveOn_fE hs hc hfix (poly cs) (convex_poly cs) fun L hL => sign_fixed c hL
+  have hconc := concaveOn_fE hs hc hfix (poly cs) hsub (convex_poly cs) fun L hL => sign_fixed c hL
   obtain ⟨v, hv, ⟨C1, hC1, C2, hC2, hdet, ht1, ht2⟩, hle⟩ :=
     exists_vertex_le cs (hb.subset hsub) _ hconc hcK
   -- a constraint of `cs` is a constraint of `side ++ Ls` up to sign
