@@ -171,7 +171,7 @@ def capXm (r : RectM) : SL :=
   | none => capX D r.1.1
   | some (n, m) => tanCap D n m (capX D r.1.1).P
 def capYm (r : RectM) : SL :=
-  match r.2.2 with
+  match r.2.2.1 with
   | none => capY D r.1.2.1
   | some (n, m) => tanCap D n m (capY D r.1.2.1).P
 
@@ -183,15 +183,15 @@ def modeP : Option (ℕ × ℕ) → Bool
   | some (n, m) => Nat.blt 0 m && Nat.ble n m
 
 lemma capXm_d {D : ℕ} (hD : 0 < D) (r : RectM) (hm : modeP r.2.1 = true) : (capXm D r).d ≠ 0 := by
-  rcases r with ⟨r, mx, my⟩
+  rcases r with ⟨r, mx, my, k⟩
   match mx, hm with
   | none, _ => simp only [capXm, capX]; omega
   | some (n, m), hm =>
     simp only [modeP, Bool.and_eq_true, Nat.blt_eq, Nat.ble_eq] at hm
     simp only [capXm, tanCap, ne_eq, mul_eq_zero, not_or]; omega
 
-lemma capYm_d {D : ℕ} (hD : 0 < D) (r : RectM) (hm : modeP r.2.2 = true) : (capYm D r).d ≠ 0 := by
-  rcases r with ⟨r, mx, my⟩
+lemma capYm_d {D : ℕ} (hD : 0 < D) (r : RectM) (hm : modeP r.2.2.1 = true) : (capYm D r).d ≠ 0 := by
+  rcases r with ⟨r, mx, my, k⟩
   match my, hm with
   | none, _ => simp only [capYm, capY]; omega
   | some (n, m), hm =>
@@ -326,7 +326,7 @@ lemma val_tanCap (n m : ℕ) (hm : 0 < m) (P : PL) (c : ℝ × ℝ) :
 lemma val_capXm (r : RectM) (hm : modeP r.2.1 = true) (c : ℝ × ℝ) :
     (capXm D r).val u c = aff (capFm (2 * Real.arctan u) r.2.1
       (-1, 0, (r.1.1 : ℝ) / D + (Real.cos (2 * Real.arctan u) + Real.sin (2 * Real.arctan u)) / 2)) c := by
-  rcases r with ⟨r, mx, my⟩
+  rcases r with ⟨r, mx, my, k⟩
   match mx, hm with
   | none, _ =>
     simp only [capXm, capFm]
@@ -338,10 +338,10 @@ lemma val_capXm (r : RectM) (hm : modeP r.2.1 = true) (c : ℝ × ℝ) :
       val_capX hD hu0 hu1]
     simp only [aff]; ring
 
-lemma val_capYm (r : RectM) (hm : modeP r.2.2 = true) (c : ℝ × ℝ) :
-    (capYm D r).val u c = aff (capFm (2 * Real.arctan u) r.2.2
+lemma val_capYm (r : RectM) (hm : modeP r.2.2.1 = true) (c : ℝ × ℝ) :
+    (capYm D r).val u c = aff (capFm (2 * Real.arctan u) r.2.2.1
       (0, -1, (r.1.2.1 : ℝ) / D + (Real.cos (2 * Real.arctan u) + Real.sin (2 * Real.arctan u)) / 2)) c := by
-  rcases r with ⟨r, mx, my⟩
+  rcases r with ⟨r, mx, my, k⟩
   match my, hm with
   | none, _ =>
     simp only [capYm, capFm]

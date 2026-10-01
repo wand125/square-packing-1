@@ -260,6 +260,14 @@ lemma val_sSL {h : ℕ} (hh : h ≠ 0) (u : ℝ) (c : ℝ × ℝ) :
   field_simp
   ring
 
+/-- `cos θ / h`. -/
+def cSL (h : ℕ) : SL := ⟨([0], [0], Cp), 0, 0, 1, h⟩
+
+lemma val_cSL {h : ℕ} (hh : h ≠ 0) (u : ℝ) (c : ℝ × ℝ) :
+    (cSL h).val u c = (1 - u ^ 2) / (1 + u ^ 2) / h := by
+  simp only [SL.val, sden, cSL, aff, evalPL, eval_Cp, eval_cons, eval_nil]
+  simp [div_div]
+
 /-- The test of a cap mode: `0`: `d ≤ 0`; `1`: none (parabola); `2`: `d ≥ s`. -/
 def ghOk (σ : Bool) (Δ X Y : Poly) (b0 b1 R : ℕ) (cap : SL) (mode : ℕ) : Bool :=
   if mode = 0 then ckRF σ (((SL.cst 0 1).sub cap).atV Δ X Y) b0 b1 R
@@ -807,6 +815,44 @@ def lebRF (Δ X Y : Poly) (D : ℕ) (r : RectM) (ax ay : CapA) : RF :=
   RF.mul (RF.const r.1.2.2.2.2 1) (RF.add Δ (RF.add Δ (RF.const 1 1)
     (RF.neg (capAU Δ X Y (capXm D r) ax))) (RF.neg (capAU Δ X Y (capYm D r) ay)))
 
+/-- A scaled line at the fixed point `(x/q, y/q)`: a constant of the centre (`e = 0`). -/
+def slAtP (L : SL) (x y q : ℕ) : RF :=
+  ⟨BernZ.add (BernZ.add (smul (x : ℤ) L.P.1) (smul (y : ℤ) L.P.2.1)) (smul (q : ℤ) L.P.2.2), 0, L.i, L.j, L.k,
+    L.d * q⟩
+
+/-- `cos θ`, `sin θ` and `1/(2 cos θ)` as rational functions of `u`. -/
+def cRF : RF := ⟨Cp, 0, 0, 0, 1, 1⟩
+def sRF : RF := ⟨Sp, 0, 0, 0, 1, 1⟩
+def i2cRF : RF := ⟨Np, 0, 1, 0, 0, 2⟩
+
+/-- The McCormick term `LemmaE.mcQ` from the values of `A, B, β*, α, β`. -/
+def mcRF (Δ : Poly) (A B bs α β : RF) : RF :=
+  RF.mul i2cRF (RF.add Δ (RF.add Δ
+    (RF.mul (RF.mul (RF.const 2 1) cRF) (RF.add Δ (RF.add Δ (RF.mul A β) (RF.mul B α)) (RF.neg (RF.mul A B))))
+    (RF.mul sRF (RF.add Δ (RF.mul (RF.mul (RF.const 2 1) bs) β) (RF.neg (RF.mul bs bs)))))
+    (RF.neg (RF.mul sRF (RF.mul α α))))
+
+/-- The alternatives of a rectangle's term for two cap alternatives: one for std, the two branches of
+the minimum for a corner kind (`LemmaE.lebPhi`). -/
+def lebRFs (Δ X Y : Poly) (D : ℕ) (r : RectM) (ax ay : CapA) : List RF :=
+  let w := RF.const r.1.2.2.2.2 1
+  let gx := RF.neg (capAU Δ X Y (capXm D r) ax)
+  let gy := RF.neg (capAU Δ X Y (capYm D r) ay)
+  match r.2.2.2 with
+  | .std => [lebRF Δ X Y D r ax ay]
+  | .c3 xa ya ym q =>
+    let aL := (capX D r.1.1).sub (sSL 1)
+    let bL := capY D r.1.2.1
+    let mc := mcRF Δ (slAtP aL xa ya q) (slAtP bL xa ya q) (slAtP bL xa ym q)
+      (((capXm D r).sub (sSL 1)).atV Δ X Y) ((capYm D r).atV Δ X Y)
+    [RF.mul w (RF.add Δ (RF.add Δ (RF.add Δ (RF.const 1 1) gx) gy) mc), RF.mul w (RF.add Δ (RF.const 1 1) gx)]
+  | .xc xa ya ym q =>
+    let aL := capX D r.1.1
+    let bL := (capY D r.1.2.1).sub (cSL 1)
+    let mc := mcRF Δ (slAtP aL xa ya q) (slAtP bL xa ya q) (slAtP bL xa ym q)
+      ((capXm D r).atV Δ X Y) (((capYm D r).sub (cSL 1)).atV Δ X Y)
+    [RF.mul w (RF.add Δ (RF.add Δ (RF.const 1 1) gy) mc), lebRF Δ X Y D r ax ay]
+
 /-! ### Common-factor certificates (`qx2_zm._gcdcert`) -/
 
 /-- The numerator with the sign of the denominator folded in (`σ^e · num`). -/
@@ -964,7 +1010,7 @@ def vAltsP (Δ X Y : Poly) (D : ℕ) (pat : List Bool) (q : (SegE × (List ℕ �
     segCAlts Δ X Y q.1.1.2.2.2.2 D (q.1.1.2.2.2.1 - q.1.1.2.1) (vUps D q.1.1) (vLos D q.1.1) q.1.2 x.1
 def lAltsP (Δ X Y : Poly) (D : ℕ) (pat : List Bool) (p : RectM × (List CapA × List CapA)) : List RF :=
   (p.2.1.filter fun a => tagOk pat (capTag a)).flatMap fun ax =>
-    (p.2.2.filter fun a => tagOk pat (capTag a)).map fun ay => lebRF Δ X Y D p.1 ax ay
+    (p.2.2.filter fun a => tagOk pat (capTag a)).flatMap fun ay => lebRFs Δ X Y D p.1 ax ay
 
 /-- **The test at a vertex**: every choice is valid, for every sign pattern of the splits every term
 has a consistent alternative, and every consistent combination plus the S-procedure terms is
@@ -1057,7 +1103,7 @@ lemma capAU_d (Δ X Y : Poly) {cap : SL} (hcap : cap.d ≠ 0) (a : CapA) : (capA
   cases a <;> simp only [capAU] <;> exact ghU_d Δ X Y cap hcap _
 
 lemma lebRF_d (Δ X Y : Poly) {D : ℕ} (hD : 0 < D) (r : RectM) (hmx : modeP r.2.1 = true)
-    (hmy : modeP r.2.2 = true) (ax ay : CapA) :
+    (hmy : modeP r.2.2.1 = true) (ax ay : CapA) :
     (lebRF Δ X Y D r ax ay).d ≠ 0 := by
   have a := capAU_d Δ X Y (cap := capXm D r) (capXm_d hD r hmx) ax
   have b := capAU_d Δ X Y (cap := capYm D r) (capYm_d hD r hmy) ay
@@ -1066,7 +1112,7 @@ lemma lebRF_d (Δ X Y : Poly) {D : ℕ} (hD : 0 < D) (r : RectM) (hmx : modeP r.
 
 lemma lebRF_le {D : ℕ} (hD : 0 < D) {σ : Bool} {Δ X Y : Poly} {b0 b1 R : ℕ} {u δ : ℝ}
     (h : VCtx Δ X Y σ b0 b1 R u δ) (r : RectM) (hmx : modeP r.2.1 = true)
-    (hmy : modeP r.2.2 = true) {ax ay : CapA}
+    (hmy : modeP r.2.2.1 = true) {ax ay : CapA}
     (gx : SqArea.ghat (Real.sin (2 * Real.arctan u)) (Real.cos (2 * Real.arctan u))
       ((capXm D r).val u (vtx X Y δ u)) ≤ (capAU Δ X Y (capXm D r) ax).eval δ u)
     (gy : SqArea.ghat (Real.sin (2 * Real.arctan u)) (Real.cos (2 * Real.arctan u))
@@ -1076,12 +1122,12 @@ lemma lebRF_le {D : ℕ} (hD : 0 < D) {σ : Bool} {Δ X Y : Poly} {b0 b1 R : ℕ
         (1 - SqArea.ghat (Real.sin (2 * Real.arctan u)) (Real.cos (2 * Real.arctan u))
           (aff (rectT (2 * Real.arctan u) D r).2.1 (vtx X Y δ u)) -
           SqArea.ghat (Real.sin (2 * Real.arctan u)) (Real.cos (2 * Real.arctan u))
-          (aff (rectT (2 * Real.arctan u) D r).2.2 (vtx X Y δ u))) := by
+          (aff (rectT (2 * Real.arctan u) D r).2.2.1 (vtx X Y δ u))) := by
   have hcx : (capXm D r).d ≠ 0 := capXm_d hD r hmx
   have hcy : (capYm D r).d ≠ 0 := capYm_d hD r hmy
   have ex : aff (rectT (2 * Real.arctan u) D r).2.1 (vtx X Y δ u) = (capXm D r).val u (vtx X Y δ u) := by
     rw [val_capXm hD h.hu0 h.hu1 r hmx]; rfl
-  have ey : aff (rectT (2 * Real.arctan u) D r).2.2 (vtx X Y δ u) = (capYm D r).val u (vtx X Y δ u) := by
+  have ey : aff (rectT (2 * Real.arctan u) D r).2.2.1 (vtx X Y δ u) = (capYm D r).val u (vtx X Y δ u) := by
     rw [val_capYm hD h.hu0 h.hu1 r hmy]; rfl
   rw [ex, ey]
   have dx := capAU_d Δ X Y hcx ax
@@ -1094,6 +1140,216 @@ lemma lebRF_le {D : ℕ} (hD : 0 < D) {σ : Bool} {Δ X Y : Poly} {b0 b1 R : ℕ
     eval_const, eval_const]
   simp only [rectT, Int.cast_one, Nat.cast_one, div_one, Int.cast_natCast]
   exact mul_le_mul_of_nonneg_left (by linarith) (Nat.cast_nonneg _)
+
+lemma eval_slAtP (L : SL) (x y q : ℕ) (hq : q ≠ 0) (δ u : ℝ) :
+    (slAtP L x y q).eval δ u = L.val u ((x : ℝ) / q, (y : ℝ) / q) := by
+  have hq' : (q : ℝ) ≠ 0 := by exact_mod_cast hq
+  simp only [RF.eval, slAtP, den, SL.val, sden, aff, evalPL, BernZ.eval_add, BernZ.eval_smul]
+  push_cast
+  field_simp
+
+lemma mul_d {r s : RF} (hr : r.d ≠ 0) (hs : s.d ≠ 0) : (RF.mul r s).d ≠ 0 := Nat.mul_ne_zero hr hs
+lemma neg_d {r : RF} (hr : r.d ≠ 0) : (RF.neg r).d ≠ 0 := hr
+lemma atV_d {L : SL} (hL : L.d ≠ 0) (Δ X Y : Poly) : (L.atV Δ X Y).d ≠ 0 := hL
+lemma slAtP_d {L : SL} (hL : L.d ≠ 0) {q : ℕ} (hq : q ≠ 0) (x y : ℕ) : (slAtP L x y q).d ≠ 0 :=
+  Nat.mul_ne_zero hL hq
+lemma sub_d {L M : SL} (hL : L.d ≠ 0) (hM : M.d ≠ 0) : (L.sub M).d ≠ 0 := Nat.mul_ne_zero hL hM
+lemma const_d (n : ℤ) {d : ℕ} (hd : d ≠ 0) : (RF.const n d).d ≠ 0 := hd
+
+/-- The `d ≠ 0` side conditions of the `RF` arithmetic. -/
+macro "rf_dok0" : tactic =>
+  `(tactic| repeat' (first | with_reducible assumption | with_reducible apply mul_d | with_reducible apply neg_d | with_reducible apply RF.add_d | with_reducible apply atV_d | with_reducible apply slAtP_d | with_reducible apply sub_d | with_reducible apply const_d | exact one_ne_zero | exact two_ne_zero | (simp only [cRF, sRF, i2cRF, sSL, cSL]; decide)))
+
+lemma mcRF_d {Δ : Poly} {A B bs α β : RF} (dA : A.d ≠ 0) (dB : B.d ≠ 0) (dbs : bs.d ≠ 0)
+    (dα : α.d ≠ 0) (dβ : β.d ≠ 0) : (mcRF Δ A B bs α β).d ≠ 0 := by
+  simp only [mcRF]; rf_dok0
+
+/-- `rf_dok0` with `mcRF_d`. -/
+macro "rf_dok" : tactic =>
+  `(tactic| repeat' (first | with_reducible assumption | with_reducible apply mul_d | with_reducible apply neg_d | with_reducible apply RF.add_d | with_reducible apply atV_d | with_reducible apply slAtP_d | with_reducible apply sub_d | with_reducible apply const_d | with_reducible apply mcRF_d | exact one_ne_zero | exact two_ne_zero | (simp only [cRF, sRF, i2cRF, sSL, cSL]; decide)))
+
+/-- A corner kind has `q ≠ 0`. -/
+def ckOk : CK → Bool
+  | .std => true
+  | .c3 _ _ _ q => Nat.blt 0 q
+  | .xc _ _ _ q => Nat.blt 0 q
+
+lemma eval_mcRF {Δ : Poly} {A B bs α β : RF} {δ u : ℝ} (h : Ok δ u) (hΔ : BernZ.eval Δ u = δ)
+    (dA : A.d ≠ 0) (dB : B.d ≠ 0) (dbs : bs.d ≠ 0) (dα : α.d ≠ 0) (dβ : β.d ≠ 0) :
+    (mcRF Δ A B bs α β).eval δ u = mcQ (2 * u / (1 + u ^ 2)) ((1 - u ^ 2) / (1 + u ^ 2))
+      (A.eval δ u) (B.eval δ u) (bs.eval δ u) (α.eval δ u) (β.eval δ u) := by
+  have h1 : (0 : ℝ) < 1 - u ^ 2 := by nlinarith [h.hu0, h.hu1]
+  have hN : (0 : ℝ) < 1 + u ^ 2 := by positivity
+  have ec : cRF.eval δ u = (1 - u ^ 2) / (1 + u ^ 2) := by simp [RF.eval, cRF, den, eval_Cp]
+  have es : sRF.eval δ u = 2 * u / (1 + u ^ 2) := by simp [RF.eval, sRF, den, eval_Sp]
+  have e2 : i2cRF.eval δ u = 1 / (2 * ((1 - u ^ 2) / (1 + u ^ 2))) := by
+    simp only [RF.eval, i2cRF, den, eval_Np]; push_cast; field_simp
+  simp (disch := rf_dok) only [mcRF, eval_mul h, eval_add h hΔ, eval_neg, eval_const, ec, es, e2]
+  simp only [mcQ]
+  field_simp
+  ring
+
+lemma lebRFs_d (Δ X Y : Poly) {D : ℕ} (hD : 0 < D) (r : RectM) (hmx : modeP r.2.1 = true)
+    (hmy : modeP r.2.2.1 = true) (hk : ckOk r.2.2.2 = true) (ax ay : CapA) :
+    ∀ t ∈ lebRFs Δ X Y D r ax ay, t.d ≠ 0 := by
+  have a := capAU_d Δ X Y (cap := capXm D r) (capXm_d hD r hmx) ax
+  have b := capAU_d Δ X Y (cap := capYm D r) (capYm_d hD r hmy) ay
+  have cx := capXm_d hD r hmx
+  have cy := capYm_d hD r hmy
+  have dX : (capX D r.1.1).d ≠ 0 := by simp [capX]; omega
+  have dY : (capY D r.1.2.1).d ≠ 0 := by simp [capY]; omega
+  have l0 := lebRF_d Δ X Y hD r hmx hmy ax ay
+  rcases r with ⟨R, m1, m2, k⟩
+  intro t ht
+  match k, ht, hk with
+  | .std, ht, _ => simp only [lebRFs, List.mem_singleton] at ht; subst ht; exact l0
+  | .c3 xa ya ym q, ht, hk =>
+    have hq : q ≠ 0 := by simp [ckOk] at hk; omega
+    simp only [lebRFs, List.mem_cons, List.not_mem_nil, or_false] at ht
+    rcases ht with rfl | rfl <;> (try simp only [mcRF]) <;> rf_dok
+  | .xc xa ya ym q, ht, hk =>
+    have hq : q ≠ 0 := by simp [ckOk] at hk; omega
+    simp only [lebRFs, List.mem_cons, List.not_mem_nil, or_false] at ht
+    rcases ht with rfl | rfl
+    · simp only [mcRF]; rf_dok
+    · exact l0
+
+lemma lebRFs_le {D : ℕ} (hD : 0 < D) {σ : Bool} {Δ X Y : Poly} {b0 b1 R : ℕ} {u δ : ℝ}
+    (h : VCtx Δ X Y σ b0 b1 R u δ) (r : RectM) (hmx : modeP r.2.1 = true)
+    (hmy : modeP r.2.2.1 = true) (hk : ckOk r.2.2.2 = true) {ax ay : CapA}
+    (gx : SqArea.ghat (Real.sin (2 * Real.arctan u)) (Real.cos (2 * Real.arctan u))
+      ((capXm D r).val u (vtx X Y δ u)) ≤ (capAU Δ X Y (capXm D r) ax).eval δ u)
+    (gy : SqArea.ghat (Real.sin (2 * Real.arctan u)) (Real.cos (2 * Real.arctan u))
+      ((capYm D r).val u (vtx X Y δ u)) ≤ (capAU Δ X Y (capYm D r) ay).eval δ u) :
+    ∃ t ∈ lebRFs Δ X Y D r ax ay, t.eval δ u ≤
+      (rectT (2 * Real.arctan u) D r).1 * lebPhi (Real.sin (2 * Real.arctan u))
+        (Real.cos (2 * Real.arctan u)) (rectT (2 * Real.arctan u) D r).2.2.2
+        (aff (rectT (2 * Real.arctan u) D r).2.1 (vtx X Y δ u))
+        (aff (rectT (2 * Real.arctan u) D r).2.2.1 (vtx X Y δ u)) := by
+  have l0 := lebRF_le hD h r hmx hmy gx gy
+  have ex : aff (rectT (2 * Real.arctan u) D r).2.1 (vtx X Y δ u) = (capXm D r).val u (vtx X Y δ u) := by
+    rw [val_capXm hD h.hu0 h.hu1 r hmx]; rfl
+  have ey : aff (rectT (2 * Real.arctan u) D r).2.2.1 (vtx X Y δ u) = (capYm D r).val u (vtx X Y δ u) := by
+    rw [val_capYm hD h.hu0 h.hu1 r hmy]; rfl
+  have dax := capAU_d Δ X Y (capXm_d hD r hmx) ax
+  have day := capAU_d Δ X Y (capYm_d hD r hmy) ay
+  have cx := capXm_d hD r hmx
+  have cy := capYm_d hD r hmy
+  have hs1 : (sSL 1).d ≠ 0 := by simp [sSL]
+  have hc1 : (cSL 1).d ≠ 0 := by simp [cSL]
+  have hδ := h.ok.hδ
+  rw [ex, ey]
+  rw [ex, ey] at l0
+  set dx := (capXm D r).val u (vtx X Y δ u) with hdx
+  set dy := (capYm D r).val u (vtx X Y δ u) with hdy
+  set Gx := (capAU Δ X Y (capXm D r) ax).eval δ u
+  set Gy := (capAU Δ X Y (capYm D r) ay).eval δ u
+  have evx : (RF.neg (capAU Δ X Y (capXm D r) ax)).eval δ u = -Gx := eval_neg _ _ _
+  have evy : (RF.neg (capAU Δ X Y (capYm D r) ay)).eval δ u = -Gy := eval_neg _ _ _
+  have tr1 := (trig u).1
+  have tr2 := (trig u).2
+  rcases r with ⟨Rr, m1, m2, k⟩
+  have dX : (capX D Rr.1).d ≠ 0 := by simp [capX]; omega
+  have dY : (capY D Rr.2.1).d ≠ 0 := by simp [capY]; omega
+  cases k with
+  | std =>
+    exact ⟨_, List.mem_singleton_self _, l0⟩
+  | c3 xa ya ym q =>
+    have hq : q ≠ 0 := by simp [ckOk] at hk; omega
+    have hq' : (q : ℝ) ≠ 0 := by exact_mod_cast hq
+    have eA : (slAtP ((capX D Rr.1).sub (sSL 1)) xa ya q).eval δ u =
+        (Rr.1 : ℝ) / D - xa / q + ((1 - u ^ 2) / (1 + u ^ 2) - 2 * u / (1 + u ^ 2)) / 2 := by
+      rw [eval_slAtP _ _ _ _ hq, val_sub _ _ dX hs1 h.hu0 h.hu1, val_capX hD h.hu0 h.hu1, val_sSL one_ne_zero,
+        tr1, tr2]; push_cast; ring
+    have eB : (slAtP (capY D Rr.2.1) xa ya q).eval δ u =
+        (Rr.2.1 : ℝ) / D - ya / q + (2 * u / (1 + u ^ 2) + (1 - u ^ 2) / (1 + u ^ 2)) / 2 := by
+      rw [eval_slAtP _ _ _ _ hq, val_capY hD h.hu0 h.hu1, tr1, tr2]; ring
+    have ebs : (slAtP (capY D Rr.2.1) xa ym q).eval δ u =
+        (Rr.2.1 : ℝ) / D - ym / q + (2 * u / (1 + u ^ 2) + (1 - u ^ 2) / (1 + u ^ 2)) / 2 := by
+      rw [eval_slAtP _ _ _ _ hq, val_capY hD h.hu0 h.hu1, tr1, tr2]; ring
+    have eα : (((capXm D (Rr, m1, m2, .c3 xa ya ym q)).sub (sSL 1)).atV Δ X Y).eval δ u = dx - 2 * u / (1 + u ^ 2) := by
+      rw [eval_atV _ Δ X Y h.hΔ hδ, val_sub _ _ cx hs1 h.hu0 h.hu1, val_sSL one_ne_zero, hdx]; simp [vtx]
+    have eβ : ((capYm D (Rr, m1, m2, .c3 xa ya ym q)).atV Δ X Y).eval δ u = dy := by
+      rw [eval_atV _ Δ X Y h.hΔ hδ, hdy]; rfl
+    have emc := eval_mcRF (A := slAtP ((capX D Rr.1).sub (sSL 1)) xa ya q) (B := slAtP (capY D Rr.2.1) xa ya q)
+      (bs := slAtP (capY D Rr.2.1) xa ym q)
+      (α := ((capXm D (Rr, m1, m2, .c3 xa ya ym q)).sub (sSL 1)).atV Δ X Y)
+      (β := (capYm D (Rr, m1, m2, .c3 xa ya ym q)).atV Δ X Y) h.ok h.hΔ
+      (slAtP_d (sub_d dX hs1) hq _ _) (slAtP_d dY hq _ _) (slAtP_d dY hq _ _) (atV_d (sub_d cx hs1) _ _ _)
+      (atV_d cy _ _ _)
+    rw [eA, eB, ebs, eα, eβ] at emc
+    simp only [lebRFs, rectT, kindK, lebPhi, List.mem_cons, List.not_mem_nil, or_false, exists_eq_or_imp,
+      exists_eq_left]
+    simp only [tr1, tr2] at gx gy ⊢
+    have ew : ∀ z : ℝ, ((((Rr.2.2.2.2 : ℕ) : ℤ) : ℝ) / ((1 : ℕ) : ℝ)) * z = (Rr.2.2.2.2 : ℝ) * z := by
+      intro z; push_cast; ring
+    have e1 : (((1 : ℤ) : ℝ) / ((1 : ℕ) : ℝ)) = 1 := by norm_num
+    rcases le_total (1 - SqArea.ghat (2 * u / (1 + u ^ 2)) ((1 - u ^ 2) / (1 + u ^ 2)) dx -
+        SqArea.ghat (2 * u / (1 + u ^ 2)) ((1 - u ^ 2) / (1 + u ^ 2)) dy +
+        mcQ (2 * u / (1 + u ^ 2)) ((1 - u ^ 2) / (1 + u ^ 2))
+          ((Rr.1 : ℝ) / D - xa / q + ((1 - u ^ 2) / (1 + u ^ 2) - 2 * u / (1 + u ^ 2)) / 2)
+          ((Rr.2.1 : ℝ) / D - ya / q + (2 * u / (1 + u ^ 2) + (1 - u ^ 2) / (1 + u ^ 2)) / 2)
+          ((Rr.2.1 : ℝ) / D - ym / q + (2 * u / (1 + u ^ 2) + (1 - u ^ 2) / (1 + u ^ 2)) / 2)
+          (dx - 2 * u / (1 + u ^ 2)) dy)
+      (1 - SqArea.ghat (2 * u / (1 + u ^ 2)) ((1 - u ^ 2) / (1 + u ^ 2)) dx) with hle | hle
+    · left
+      rw [min_eq_left hle]
+      simp (disch := rf_dok) only [eval_mul h.ok, eval_add h.ok h.hΔ, eval_const, evx, evy]
+      rw [emc, ew, e1]
+      exact mul_le_mul_of_nonneg_left (by linarith) (Nat.cast_nonneg _)
+    · right
+      rw [min_eq_right hle]
+      simp (disch := rf_dok) only [eval_mul h.ok, eval_add h.ok h.hΔ, eval_const, evx]
+      rw [ew, e1]
+      exact mul_le_mul_of_nonneg_left (by linarith) (Nat.cast_nonneg _)
+  | xc xa ya ym q =>
+    have hq : q ≠ 0 := by simp [ckOk] at hk; omega
+    have hq' : (q : ℝ) ≠ 0 := by exact_mod_cast hq
+    have eA : (slAtP (capX D Rr.1) xa ya q).eval δ u =
+        (Rr.1 : ℝ) / D - xa / q + ((1 - u ^ 2) / (1 + u ^ 2) + 2 * u / (1 + u ^ 2)) / 2 := by
+      rw [eval_slAtP _ _ _ _ hq, val_capX hD h.hu0 h.hu1, tr1, tr2]
+    have eB : (slAtP ((capY D Rr.2.1).sub (cSL 1)) xa ya q).eval δ u =
+        (Rr.2.1 : ℝ) / D - ya / q - ((1 - u ^ 2) / (1 + u ^ 2) - 2 * u / (1 + u ^ 2)) / 2 := by
+      rw [eval_slAtP _ _ _ _ hq, val_sub _ _ dY hc1 h.hu0 h.hu1, val_capY hD h.hu0 h.hu1, val_cSL one_ne_zero,
+        tr1, tr2]; push_cast; ring
+    have ebs : (slAtP ((capY D Rr.2.1).sub (cSL 1)) xa ym q).eval δ u =
+        (Rr.2.1 : ℝ) / D - ym / q - ((1 - u ^ 2) / (1 + u ^ 2) - 2 * u / (1 + u ^ 2)) / 2 := by
+      rw [eval_slAtP _ _ _ _ hq, val_sub _ _ dY hc1 h.hu0 h.hu1, val_capY hD h.hu0 h.hu1, val_cSL one_ne_zero,
+        tr1, tr2]; push_cast; ring
+    have eα : ((capXm D (Rr, m1, m2, .xc xa ya ym q)).atV Δ X Y).eval δ u = dx := by
+      rw [eval_atV _ Δ X Y h.hΔ hδ, hdx]; rfl
+    have eβ : (((capYm D (Rr, m1, m2, .xc xa ya ym q)).sub (cSL 1)).atV Δ X Y).eval δ u =
+        dy - (1 - u ^ 2) / (1 + u ^ 2) := by
+      rw [eval_atV _ Δ X Y h.hΔ hδ, val_sub _ _ cy hc1 h.hu0 h.hu1, val_cSL one_ne_zero, hdy]; simp [vtx]
+    have emc := eval_mcRF (A := slAtP (capX D Rr.1) xa ya q) (B := slAtP ((capY D Rr.2.1).sub (cSL 1)) xa ya q)
+      (bs := slAtP ((capY D Rr.2.1).sub (cSL 1)) xa ym q)
+      (α := (capXm D (Rr, m1, m2, .xc xa ya ym q)).atV Δ X Y)
+      (β := ((capYm D (Rr, m1, m2, .xc xa ya ym q)).sub (cSL 1)).atV Δ X Y) h.ok h.hΔ
+      (slAtP_d dX hq _ _) (slAtP_d (sub_d dY hc1) hq _ _) (slAtP_d (sub_d dY hc1) hq _ _) (atV_d cx _ _ _)
+      (atV_d (sub_d cy hc1) _ _ _)
+    rw [eA, eB, ebs, eα, eβ] at emc
+    simp only [lebRFs, rectT, kindK, lebPhi, List.mem_cons, List.not_mem_nil, or_false, exists_eq_or_imp,
+      exists_eq_left]
+    simp only [tr1, tr2] at gx gy l0 ⊢
+    have ew : ∀ z : ℝ, ((((Rr.2.2.2.2 : ℕ) : ℤ) : ℝ) / ((1 : ℕ) : ℝ)) * z = (Rr.2.2.2.2 : ℝ) * z := by
+      intro z; push_cast; ring
+    have e1 : (((1 : ℤ) : ℝ) / ((1 : ℕ) : ℝ)) = 1 := by norm_num
+    rcases le_total (1 - SqArea.ghat (2 * u / (1 + u ^ 2)) ((1 - u ^ 2) / (1 + u ^ 2)) dy +
+        mcQ (2 * u / (1 + u ^ 2)) ((1 - u ^ 2) / (1 + u ^ 2))
+          ((Rr.1 : ℝ) / D - xa / q + ((1 - u ^ 2) / (1 + u ^ 2) + 2 * u / (1 + u ^ 2)) / 2)
+          ((Rr.2.1 : ℝ) / D - ya / q - ((1 - u ^ 2) / (1 + u ^ 2) - 2 * u / (1 + u ^ 2)) / 2)
+          ((Rr.2.1 : ℝ) / D - ym / q - ((1 - u ^ 2) / (1 + u ^ 2) - 2 * u / (1 + u ^ 2)) / 2)
+          dx (dy - (1 - u ^ 2) / (1 + u ^ 2)))
+      (1 - SqArea.ghat (2 * u / (1 + u ^ 2)) ((1 - u ^ 2) / (1 + u ^ 2)) dx -
+        SqArea.ghat (2 * u / (1 + u ^ 2)) ((1 - u ^ 2) / (1 + u ^ 2)) dy) with hle | hle
+    · left
+      rw [min_eq_left hle]
+      simp (disch := rf_dok) only [eval_mul h.ok, eval_add h.ok h.hΔ, eval_const, evy]
+      rw [emc, ew, e1]
+      exact mul_le_mul_of_nonneg_left (by linarith) (Nat.cast_nonneg _)
+    · right
+      rw [min_eq_right hle]
+      exact l0
 
 lemma sproc_d (Δ X Y : Poly) {sp : Split} (hq : sp.q.d ≠ 0) (hm : sp.dm ≠ 0) (hp : sp.dp ≠ 0)
     (b : Bool) : (sproc Δ X Y sp b).d ≠ 0 := by
@@ -1175,7 +1431,7 @@ theorem vertOk_sound {D W : ℕ} (hD : 0 < D) {σ : Bool} {Δ X Y : Poly} {b0 b1
     (h : VCtx Δ X Y σ b0 b1 R u δ) {chs cvs : List SegE} {crs : List RectM}
     (hch : ∀ e ∈ chs, e.1 < e.2.2.1) (hcv : ∀ e ∈ cvs, e.2.1 < e.2.2.2.1)
     {hbx vbx : List (List ℕ × List ℕ)} (hbd : BoxDom D u (vtx X Y δ u) chs cvs hbx vbx) {c : VCert}
-    (hsq : ∀ sp ∈ c.splits, sp.q.d ≠ 0) (hmd : ∀ r ∈ crs, modeP r.2.1 = true ∧ modeP r.2.2 = true)
+    (hsq : ∀ sp ∈ c.splits, sp.q.d ≠ 0) (hmd : ∀ r ∈ crs, modeP r.2.1 = true ∧ modeP r.2.2.1 = true ∧ ckOk r.2.2.2 = true)
     (hok : vertOk D W σ Δ X Y b0 b1 R chs cvs crs hbx vbx c = true) :
     (W : ℝ) ≤ fE (Real.sin (2 * Real.arctan u)) (Real.cos (2 * Real.arctan u))
       (chs.map (hsegT (2 * Real.arctan u) D) ++ cvs.map (vsegT (2 * Real.arctan u) D))
@@ -1221,8 +1477,8 @@ theorem vertOk_sound {D W : ℕ} (hD : 0 < D) {σ : Bool} {Δ X Y : Poly} {b0 b1
       (hd_vUps hD q.1.1) (hd_vLos hD q.1.1)
     exact ⟨t, List.mem_flatMap.mpr ⟨x, List.mem_filter.mpr ⟨hxm, hxt⟩, ht⟩, hle⟩
   have hL' : ∀ p ∈ crs.zip c.lc, ∃ t ∈ lAltsP Δ X Y D pat p, t.eval δ u ≤
-      (rectT θ D p.1).1 * (1 - SqArea.ghat (Real.sin θ) (Real.cos θ) (aff (rectT θ D p.1).2.1 v) -
-        SqArea.ghat (Real.sin θ) (Real.cos θ) (aff (rectT θ D p.1).2.2 v)) := by
+      (rectT θ D p.1).1 * lebPhi (Real.sin θ) (Real.cos θ) (rectT θ D p.1).2.2.2 (aff (rectT θ D p.1).2.1 v)
+        (aff (rectT θ D p.1).2.2.1 v) := by
     intro p hp
     have hk := hL p hp
     have hn := nl p.2 (List.of_mem_zip hp).2
@@ -1230,9 +1486,10 @@ theorem vertOk_sound {D W : ℕ} (hD : 0 < D) {σ : Bool} {Δ X Y : Poly} {b0 b1
     obtain ⟨ay, hay, hyt⟩ := List.any_eq_true.mp hn.2
     have hm := hmd p.1 (List.of_mem_zip hp).1
     have gx := capA_ge h (capXm_d hD p.1 hm.1) (hk.1 ax hax) hxt
-    have gy := capA_ge h (capYm_d hD p.1 hm.2) (hk.2 ay hay) hyt
-    refine ⟨lebRF Δ X Y D p.1 ax ay, List.mem_flatMap.mpr ⟨ax, List.mem_filter.mpr ⟨hax, hxt⟩,
-      List.mem_map.mpr ⟨ay, List.mem_filter.mpr ⟨hay, hyt⟩, rfl⟩⟩, lebRF_le hD h p.1 hm.1 hm.2 gx gy⟩
+    have gy := capA_ge h (capYm_d hD p.1 hm.2.1) (hk.2 ay hay) hyt
+    obtain ⟨t, ht, hle⟩ := lebRFs_le hD h p.1 hm.1 hm.2.1 hm.2.2 gx gy
+    exact ⟨t, List.mem_flatMap.mpr ⟨ax, List.mem_filter.mpr ⟨hax, hxt⟩,
+      List.mem_flatMap.mpr ⟨ay, List.mem_filter.mpr ⟨hay, hyt⟩, ht⟩⟩, hle⟩
   obtain ⟨c1, hc1, hs1⟩ := exists_comb_zip (f := fun t => t.eval δ u) _ _ _ hH'
   obtain ⟨c2, hc2, hs2⟩ := exists_comb_zip (f := fun t => t.eval δ u) _ _ _ hV'
   obtain ⟨c3, hc3, hs3⟩ := exists_comb_zip (f := fun t => t.eval δ u) _ _ _ hL'
@@ -1251,9 +1508,9 @@ theorem vertOk_sound {D W : ℕ} (hD : 0 < D) {σ : Bool} {Δ X Y : Poly} {b0 b1
       obtain ⟨x, _, hr⟩ := List.mem_flatMap.mp hr
       exact segCAlts_d hD (by omega) (hd_vUps hD q.1.1) (hd_vLos hD q.1.1) _ _ r hr
     · obtain ⟨ax, _, hr⟩ := List.mem_flatMap.mp hr
-      obtain ⟨ay, _, rfl⟩ := List.mem_map.mp hr
+      obtain ⟨ay, _, hr⟩ := List.mem_flatMap.mp hr
       have hm := hmd p.1 (List.of_mem_zip hp).1
-      exact lebRF_d Δ X Y hD p.1 hm.1 hm.2 ax ay
+      exact lebRFs_d Δ X Y hD p.1 hm.1 hm.2.1 hm.2.2 ax ay r hr
   have dS : ∀ r ∈ (c.splits.zip pat).map (fun x => sproc Δ X Y x.1 x.2), r.d ≠ 0 := by
     intro r hr
     obtain ⟨x, hx, rfl⟩ := List.mem_map.mp hr
@@ -1296,8 +1553,8 @@ theorem vertOk_sound {D W : ℕ} (hD : 0 < D) {σ : Bool} {Δ X Y : Poly} {b0 b1
   have z2' := sum_map_zip_fst cvs vbx
     (fun e => (vsegT θ D e).1 * max 0 (clampMin (vsegT θ D e).2.1 (vsegT θ D e).2.2 v)) lv
   have z3 := sum_map_zip_fst crs c.lc
-    (fun r => (rectT θ D r).1 * (1 - SqArea.ghat (Real.sin θ) (Real.cos θ) (aff (rectT θ D r).2.1 v) -
-      SqArea.ghat (Real.sin θ) (Real.cos θ) (aff (rectT θ D r).2.2 v))) l3
+    (fun r => (rectT θ D r).1 * lebPhi (Real.sin θ) (Real.cos θ) (rectT θ D r).2.2.2 (aff (rectT θ D r).2.1 v)
+      (aff (rectT θ D r).2.2.1 v)) l3
   rw [z1, z1'] at hs1
   rw [z2, z2'] at hs2
   rw [z3] at hs3

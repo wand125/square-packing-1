@@ -1,5 +1,5 @@
 import Sqpack.ChordE
-import Sqpack.LebTan
+import Sqpack.LebCorner
 import Sqpack.PolyMin
 import Sqpack.CovMP
 
@@ -84,13 +84,40 @@ theorem convexOn_ghat (K : Set (ℝ × ℝ)) (hK : Convex ℝ K) {s co : ℝ} (h
 
 /-- A segment term `(κ, M, forms)`: `κ · max(0, clampMin M forms)`. -/
 abbrev SegT := ℝ × ℝ × List (ℝ × ℝ × ℝ)
-/-- A Lebesgue term `(ρ, d_x, d_y)`: `ρ · (1 − ĝ(d_x) − ĝ(d_y))`. -/
-abbrev LebT := ℝ × (ℝ × ℝ × ℝ) × (ℝ × ℝ × ℝ)
+/-- The kind of a Lebesgue term: the plain `E′` bound, or one of the corner bounds of `E″`
+(`LebCorner.lean`) with the McCormick constants `A, B, β*` (`QUADRANT_EXACT.md` §4.4). -/
+inductive LebK where
+  | std
+  | c3 (A B bs : ℝ)
+  | xc (A B bs : ℝ)
+
+/-- The McCormick minorant of `quad(α, β) = (2cαβ + s(β² − α²))/(2c)`:
+`αβ ≥ Aβ + Bα − AB` (when `(α − A)(β − B) ≥ 0`), `β² ≥ 2β*β − β*²`, `−α²` kept. -/
+noncomputable def mcQ (s co A B bs α β : ℝ) : ℝ :=
+  (2 * co * (A * β + B * α - A * B) + s * (2 * bs * β - bs ^ 2) - s * α ^ 2) / (2 * co)
+
+lemma mcQ_le {s co A B bs α β : ℝ} (hs : 0 ≤ s) (hc : 0 < co) (h : 0 ≤ (α - A) * (β - B)) :
+    mcQ s co A B bs α β ≤ (2 * co * α * β + s * (β ^ 2 - α ^ 2)) / (2 * co) := by
+  rw [mcQ, div_le_div_iff_of_pos_right (by positivity)]
+  nlinarith [mul_nonneg hc.le h, mul_nonneg hs (sq_nonneg (β - bs))]
+
+/-- The Lebesgue bound of a kind from the cap depths: std `1 − ĝ(d_x) − ĝ(d_y)`; corner3 (frame at
+the lowest vertex, `α = d_x − s`, `β = d_y`) `min(1 − ĝ_x − ĝ_y + Mc, 1 − ĝ_x)`; xcut (frame at the
+leftmost vertex, `α = d_x`, `β = d_y − c`) `min(1 − ĝ_y + Mc, 1 − ĝ_x − ĝ_y)`. -/
+noncomputable def lebPhi (s co : ℝ) : LebK → ℝ → ℝ → ℝ
+  | .std, dx, dy => 1 - SqArea.ghat s co dx - SqArea.ghat s co dy
+  | .c3 A B bs, dx, dy => min (1 - SqArea.ghat s co dx - SqArea.ghat s co dy + mcQ s co A B bs (dx - s) dy)
+      (1 - SqArea.ghat s co dx)
+  | .xc A B bs, dx, dy => min (1 - SqArea.ghat s co dy + mcQ s co A B bs dx (dy - co))
+      (1 - SqArea.ghat s co dx - SqArea.ghat s co dy)
+
+/-- A Lebesgue term `(ρ, d_x, d_y, kind)`: `ρ · lebPhi(kind, d_x, d_y)`. -/
+abbrev LebT := ℝ × (ℝ × ℝ × ℝ) × (ℝ × ℝ × ℝ) × LebK
 
 /-- The lower bound of Lemma E at a fixed angle. -/
 noncomputable def fE (s co : ℝ) (sts : List SegT) (lts : List LebT) (p : ℝ × ℝ) : ℝ :=
   (sts.map fun t => t.1 * max 0 (clampMin t.2.1 t.2.2 p)).sum +
-    (lts.map fun l => l.1 * (1 - SqArea.ghat s co (aff l.2.1 p) - SqArea.ghat s co (aff l.2.2 p))).sum
+    (lts.map fun l => l.1 * lebPhi s co l.2.2.2 (aff l.2.1 p) (aff l.2.2.1 p)).sum
 
 /-- `F` is a positive multiple of a line of `Ls`. -/
 def PosMul (Ls : List (ℝ × ℝ × ℝ)) (F : ℝ × ℝ × ℝ) : Prop :=
@@ -110,7 +137,7 @@ def Fixed (R : Set (ℝ × ℝ)) (s : ℝ) (Ls : List (ℝ × ℝ × ℝ)) (sts 
     Prop :=
   (∀ t ∈ sts, 0 ≤ t.1 ∧ 0 ≤ t.2.1 ∧ ∀ F ∈ t.2.2, Pinned R Ls F) ∧
     (∀ l ∈ lts, 0 ≤ l.1 ∧ Pinned R Ls l.2.1 ∧ Pinned R Ls (subF l.2.1 (constF s)) ∧
-      Pinned R Ls l.2.2 ∧ Pinned R Ls (subF l.2.2 (constF s)))
+      Pinned R Ls l.2.2.1 ∧ Pinned R Ls (subF l.2.2.1 (constF s)))
 
 /-- The line `L` oriented to be `≥ 0` at `c`. -/
 noncomputable def orient (c : ℝ × ℝ) (L : ℝ × ℝ × ℝ) : ℝ × ℝ × ℝ :=
@@ -166,6 +193,35 @@ lemma concaveOn_list_sum {ι : Type*} (K : Set (ℝ × ℝ)) (hK : Convex ℝ K)
     simp only [List.map_cons, List.sum_cons]
     exact (hf a List.mem_cons_self).add (ih fun i hi => hf i (List.mem_cons_of_mem _ hi))
 
+/-- The McCormick term is concave in the centre (`−sα²/(2c)` with `α` affine). -/
+lemma concaveOn_mcQ (K : Set (ℝ × ℝ)) (hK : Convex ℝ K) {s co : ℝ} (hs : 0 < s) (hc : 0 < co)
+    (A B bs : ℝ) (Fa Fb : ℝ × ℝ × ℝ) :
+    ConcaveOn ℝ K (fun p => mcQ s co A B bs (aff Fa p) (aff Fb p)) := by
+  set G : ℝ × ℝ × ℝ := ((A + s * bs / co) * Fb.1 + B * Fa.1, (A + s * bs / co) * Fb.2.1 + B * Fa.2.1,
+    (A + s * bs / co) * Fb.2.2 + B * Fa.2.2 - A * B - s * bs ^ 2 / (2 * co))
+  have hk : 0 ≤ s / (2 * co) := by positivity
+  refine ((concaveOn_aff K hK G).sub ((convexOn_aff_sq K hK Fa).smul hk)).congr fun p _ => ?_
+  simp only [mcQ, G, aff, Pi.sub_apply, Pi.smul_apply, smul_eq_mul]
+  field_simp
+  ring
+
+lemma concaveOn_lebPhi (K : Set (ℝ × ℝ)) (hK : Convex ℝ K) {s co : ℝ} (hs : 0 < s) (hc : 0 < co)
+    (k : LebK) {Fx Fy : ℝ × ℝ × ℝ} (cx : ConvexOn ℝ K (fun p => SqArea.ghat s co (aff Fx p)))
+    (cy : ConvexOn ℝ K (fun p => SqArea.ghat s co (aff Fy p))) :
+    ConcaveOn ℝ K (fun p => lebPhi s co k (aff Fx p) (aff Fy p)) := by
+  match k with
+  | .std => exact ((concaveOn_const 1 hK).sub cx).sub cy
+  | .c3 A B bs =>
+    have m := concaveOn_mcQ K hK hs hc A B bs (subF Fx (constF s)) Fy
+    refine ((((concaveOn_const 1 hK).sub cx).sub cy).add m |>.inf ((concaveOn_const 1 hK).sub cx)).congr
+      fun p _ => ?_
+    simp only [lebPhi, aff_subF, aff_constF, Pi.inf_apply, Pi.add_apply, Pi.sub_apply]
+  | .xc A B bs =>
+    have m := concaveOn_mcQ K hK hs hc A B bs Fx (subF Fy (constF co))
+    refine ((((concaveOn_const 1 hK).sub cy).add m) |>.inf (((concaveOn_const 1 hK).sub cx).sub cy)).congr
+      fun p _ => ?_
+    simp only [lebPhi, aff_subF, aff_constF, Pi.inf_apply, Pi.add_apply, Pi.sub_apply]
+
 /-- `fE` is concave on every cell. -/
 theorem concaveOn_fE {s co : ℝ} (hs : 0 < s) (hc : 0 < co) {R : Set (ℝ × ℝ)}
     {Ls : List (ℝ × ℝ × ℝ)} {sts : List SegT} {lts : List LebT} (hfix : Fixed R s Ls sts lts)
@@ -187,11 +243,11 @@ theorem concaveOn_fE {s co : ℝ} (hs : 0 < s) (hc : 0 < co) {R : Set (ℝ × �
       rcases sx' with h | h
       · right; intro p hp; have := h p hp; simp only [aff_subF, aff_constF] at this; linarith
       · left; intro p hp; have := h p hp; simp only [aff_subF, aff_constF] at this; linarith)
-    have cy := convexOn_ghat K hK hs hc l.2.2 (Or.symm sy) (by
+    have cy := convexOn_ghat K hK hs hc l.2.2.1 (Or.symm sy) (by
       rcases sy' with h | h
       · right; intro p hp; have := h p hp; simp only [aff_subF, aff_constF] at this; linarith
       · left; intro p hp; have := h p hp; simp only [aff_subF, aff_constF] at this; linarith)
-    exact (((concaveOn_const 1 hK).sub cx).sub cy).smul hρ
+    exact (concaveOn_lebPhi K hK hs hc l.2.2.2 cx cy).smul hρ
 
 /-- **Lemma E's vertex reduction, at a fixed angle.**  On the bounded region `poly side`, `fE` at any
 point is at least its value at some vertex of the arrangement of `side ++ Ls` inside the region. -/
@@ -296,9 +352,17 @@ noncomputable def vsegT (D : ℕ) (e : SegE) : SegT :=
   let A := (e.2.1 : ℝ) / D; let B := (e.2.2.2.1 : ℝ) / D; let ξ := (e.1 : ℝ) / D
   ((e.2.2.2.2 : ℝ) / (B - A), B - A, formsOf A B (vLX θ ξ) (vLY θ ξ) (vUX θ ξ) (vUY θ ξ))
 
+/-- The corner kind of a rectangle entry: none, or corner3 / xcut with the McCormick anchor
+`(xa, ya)/q` (a corner of the box) and the tangent point `ym/q` of `β²`. -/
+inductive CK where
+  | std
+  | c3 (xa ya ym q : ℕ)
+  | xc (xa ya ym q : ℕ)
+  deriving DecidableEq
+
 /-- A rectangle entry with the modes of its two caps (`none` = std, `some (n, m)` = `tan` at
-`d* = n/m`). -/
-abbrev RectM := RectE × Option (ℕ × ℕ) × Option (ℕ × ℕ)
+`d* = n/m`) and its corner kind. -/
+abbrev RectM := RectE × Option (ℕ × ℕ) × Option (ℕ × ℕ) × CK
 
 /-- The `tan` transform of a cap form `d` (`d* = n/m`): `d' = (k/s) d + c − k²/(2s) − k d*/s + s/2`,
 `k = s + c − d*`, so that `ĝ(d') ≥ (d' − s/2)/c = 1 − T_{d*}(d)` (`SqArea.one_sub_tanT`). -/
@@ -316,11 +380,36 @@ def ModeOk : Option (ℕ × ℕ) → ℝ → Prop
   | none, _ => True
   | some (n, m), d => (n : ℝ) / m ≤ 1 ∧ max (Real.sin θ) (Real.cos θ) ≤ d
 
+/-- The Lebesgue kind of an entry at `θ`: the McCormick constants are `α`, `β` at the anchor and
+`β` at `ym/q` (corner3: `α = d_x − s`, `β = d_y`; xcut: `α = d_x`, `β = d_y − c`). -/
+noncomputable def kindK (D : ℕ) (r : RectM) : LebK :=
+  let s := Real.sin θ; let co := Real.cos θ
+  let X := (r.1.1 : ℝ) / D; let Y := (r.1.2.1 : ℝ) / D
+  match r.2.2.2 with
+  | .std => .std
+  | .c3 xa ya ym q => .c3 (X - xa / q + (co - s) / 2) (Y - ya / q + (s + co) / 2) (Y - ym / q + (s + co) / 2)
+  | .xc xa ya ym q => .xc (X - xa / q + (co + s) / 2) (Y - ya / q - (co - s) / 2) (Y - ym / q - (co - s) / 2)
+
+/-- The conditions of a corner kind at the centre `c` (`LebCorner.area_ge_corner3`, `area_ge_xcut`),
+with std caps and the anchor condition `(α − A)(β − B) ≥ 0`. -/
+def KindOk (D : ℕ) (r : RectM) (c : ℝ × ℝ) : Prop :=
+  let s := Real.sin θ; let co := Real.cos θ
+  let X := (r.1.1 : ℝ) / D; let Y := (r.1.2.1 : ℝ) / D
+  match r.2.2.2 with
+  | .std => True
+  | .c3 xa ya _ q => r.2.1 = none ∧ r.2.2.1 = none ∧
+      0 ≤ X - c.1 + (co - s) / 2 ∧ X - c.1 + (co - s) / 2 ≤ co ∧ Y - c.2 + (s + co) / 2 ≤ co ∧
+      co * (X - c.1 + (co - s) / 2) + s * (Y - c.2 + (s + co) / 2) ≤ 1 ∧
+      0 ≤ ((xa : ℝ) / q - c.1) * ((ya : ℝ) / q - c.2)
+  | .xc xa ya _ q => r.2.1 = none ∧ r.2.2.1 = none ∧
+      X - c.1 + (co + s) / 2 ≤ s ∧ Y - c.2 - (co - s) / 2 ≤ 0 ∧
+      0 ≤ ((xa : ℝ) / q - c.1) * ((ya : ℝ) / q - c.2)
+
 /-- The term of a rectangle entry with its cap modes: `d_x = X0/D − x_min`, `d_y = Y0/D − y_min`,
 each possibly `tan`-transformed. -/
 noncomputable def rectT (D : ℕ) (r : RectM) : LebT :=
   ((r.1.2.2.2.2 : ℝ), capFm θ r.2.1 (-1, 0, (r.1.1 : ℝ) / D + (Real.cos θ + Real.sin θ) / 2),
-    capFm θ r.2.2 (0, -1, (r.1.2.1 : ℝ) / D + (Real.cos θ + Real.sin θ) / 2))
+    capFm θ r.2.2.1 (0, -1, (r.1.2.1 : ℝ) / D + (Real.cos θ + Real.sin θ) / 2), kindK θ D r)
 
 variable {θ}
 
@@ -367,7 +456,7 @@ theorem fE_le_mass {D : ℕ} (hD : 0 < D) (hs : 0 < Real.sin θ) (hc : 0 < Real.
     (hcrs : ∀ r ∈ crs, r.1 ∈ rects ∧
       (∀ p ∈ sq c θ 1, p.1 ≤ (r.1.2.2.1 : ℝ) / D ∧ p.2 ≤ (r.1.2.2.2.1 : ℝ) / D) ∧
       ModeOk θ r.2.1 ((r.1.1 : ℝ) / D - SqArea.xmin c θ) ∧
-      ModeOk θ r.2.2 ((r.1.2.1 : ℝ) / D - SqArea.ymin c θ)) :
+      ModeOk θ r.2.2.1 ((r.1.2.1 : ℝ) / D - SqArea.ymin c θ) ∧ KindOk θ D r c) :
     fE (Real.sin θ) (Real.cos θ) (chs.map (hsegT θ D) ++ cvs.map (vsegT θ D))
         (crs.map (rectT θ D)) c ≤
       segMass D segs (sq c θ 1) + rectMass D rects (sq c θ 1) := by
@@ -428,23 +517,53 @@ theorem fE_le_mass {D : ℕ} (hD : 0 < D) (hs : 0 < Real.sin θ) (hc : 0 < Real.
     · congr 1; exact List.map_congr_left fun e he => (hHp e he).2
     · congr 1; exact List.map_congr_left fun e he => (hVp e he).2
   -- rectangles
-  have Rc : ((crs.map (rectT θ D)).map fun l => l.1 * (1 - SqArea.ghat (Real.sin θ) (Real.cos θ)
-      (aff l.2.1 c) - SqArea.ghat (Real.sin θ) (Real.cos θ) (aff l.2.2 c))).sum ≤
-      rectMass D rects (sq c θ 1) := by
-    have hterm : ∀ r ∈ crs, (rectT θ D r).1 * (1 - SqArea.ghat (Real.sin θ) (Real.cos θ)
-        (aff (rectT θ D r).2.1 c) - SqArea.ghat (Real.sin θ) (Real.cos θ) (aff (rectT θ D r).2.2 c)) ≤
+  have Rc : ((crs.map (rectT θ D)).map fun l => l.1 * lebPhi (Real.sin θ) (Real.cos θ) l.2.2.2
+      (aff l.2.1 c) (aff l.2.2.1 c)).sum ≤ rectMass D rects (sq c θ 1) := by
+    have hterm : ∀ r ∈ crs, (rectT θ D r).1 * lebPhi (Real.sin θ) (Real.cos θ) (rectT θ D r).2.2.2
+        (aff (rectT θ D r).2.1 c) (aff (rectT θ D r).2.2.1 c) ≤
         (r.1.2.2.2.2 : ℝ) * (volume (sq c θ 1 ∩ rectSet D r.1)).toReal := by
       intro r hr
-      obtain ⟨_, hb, mx, my⟩ := hcrs r hr
+      obtain ⟨_, hb, mx, my, hk⟩ := hcrs r hr
+      refine mul_le_mul_of_nonneg_left ?_ (Nat.cast_nonneg _)
       have ex : aff ((-1, 0, (r.1.1 : ℝ) / D + (Real.cos θ + Real.sin θ) / 2) : ℝ × ℝ × ℝ) c =
           (r.1.1 : ℝ) / D - SqArea.xmin c θ := by
         simp only [aff, SqArea.xmin]; ring
       have ey : aff ((0, -1, (r.1.2.1 : ℝ) / D + (Real.cos θ + Real.sin θ) / 2) : ℝ × ℝ × ℝ) c =
           (r.1.2.1 : ℝ) / D - SqArea.ymin c θ := by
         simp only [aff, SqArea.ymin]; ring
-      have h := SqArea.area_ge_caps (SqArea.ghat_nonneg hs hc) (SqArea.ghat_nonneg hs hc) hb
-        (cap_le_mode hs hc r.2.1 ex mx) (bottom_cap_le_mode hs hc r.2.2 ey my)
-      exact mul_le_mul_of_nonneg_left h (Nat.cast_nonneg _)
+      have gx := cap_le_mode hs hc r.2.1 ex mx
+      have gy := bottom_cap_le_mode hs hc r.2.2.1 ey my
+      obtain ⟨R, m1, m2, k⟩ := r
+      simp only [rectT] at gx gy ⊢
+      match k, hk with
+      | .std, _ =>
+        exact SqArea.area_ge_caps (SqArea.ghat_nonneg hs hc) (SqArea.ghat_nonneg hs hc) hb gx gy
+      | .c3 xa ya ym q, hk =>
+        obtain ⟨rfl, rfl, h1, h2, h3, h4, h5⟩ := hk
+        simp only [capFm] at gx gy ⊢
+        rw [ex, ey] at *
+        simp only [kindK, lebPhi]
+        refine le_trans (le_of_eq ?_) (SqArea.area_ge_corner3 (M := mcQ (Real.sin θ) (Real.cos θ)
+          ((R.1 : ℝ) / D - xa / q + (Real.cos θ - Real.sin θ) / 2)
+          ((R.2.1 : ℝ) / D - ya / q + (Real.sin θ + Real.cos θ) / 2)
+          ((R.2.1 : ℝ) / D - ym / q + (Real.sin θ + Real.cos θ) / 2)
+          ((R.1 : ℝ) / D - c.1 + (Real.cos θ - Real.sin θ) / 2) ((R.2.1 : ℝ) / D - c.2 + (Real.sin θ + Real.cos θ) / 2))
+          hs hc hb gx gy (SqArea.ghat_nonneg hs hc) (SqArea.ghat_nonneg hs hc) h1 h2 h3 h4
+          (mcQ_le hs.le hc (by convert h5 using 2 <;> ring)))
+        simp only [aff, SqArea.xmin, SqArea.ymin]; ring_nf
+      | .xc xa ya ym q, hk =>
+        obtain ⟨rfl, rfl, h1, h2, h5⟩ := hk
+        simp only [capFm] at gx gy ⊢
+        rw [ex, ey] at *
+        simp only [kindK, lebPhi]
+        refine le_trans (le_of_eq ?_) (SqArea.area_ge_xcut (M := mcQ (Real.sin θ) (Real.cos θ)
+          ((R.1 : ℝ) / D - xa / q + (Real.cos θ + Real.sin θ) / 2)
+          ((R.2.1 : ℝ) / D - ya / q - (Real.cos θ - Real.sin θ) / 2)
+          ((R.2.1 : ℝ) / D - ym / q - (Real.cos θ - Real.sin θ) / 2)
+          ((R.1 : ℝ) / D - c.1 + (Real.cos θ + Real.sin θ) / 2) ((R.2.1 : ℝ) / D - c.2 - (Real.cos θ - Real.sin θ) / 2))
+          hs hc hb gx gy (SqArea.ghat_nonneg hs hc) (SqArea.ghat_nonneg hs hc) h1 h2
+          (mcQ_le hs.le hc (by convert h5 using 2 <;> ring)))
+        simp only [aff, SqArea.xmin, SqArea.ymin]; ring_nf
     rw [List.map_map]
     refine le_trans (List.sum_le_sum fun r hr => hterm r hr) ?_
     have hmap : (crs.map fun r => (r.1.2.2.2.2 : ℝ) * (volume (sq c θ 1 ∩ rectSet D r.1)).toReal) =

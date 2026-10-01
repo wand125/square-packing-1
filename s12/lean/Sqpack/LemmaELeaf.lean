@@ -187,7 +187,7 @@ lemma binsOk_find {D W R : ℕ} {side : List PL} {chs cvs : List SegE} {crs : Li
 there. -/
 theorem pair_sound {D W R U0 U1 : ℕ} {side : List PL} {chs cvs : List SegE} {crs : List RectM}
     {hbx vbx : List (List ℕ × List ℕ)}
-    (hcl : Claims D chs cvs) (hmd : ∀ r ∈ crs, modeP r.2.1 = true ∧ modeP r.2.2 = true) (hR : 0 < R)
+    (hcl : Claims D chs cvs) (hmd : ∀ r ∈ crs, modeP r.2.1 = true ∧ modeP r.2.2.1 = true ∧ ckOk r.2.2.2 = true) (hR : 0 < R)
     {P Q : PL} {cert : PairCert}
     (hok : pairOk D W R U0 U1 side chs cvs crs hbx vbx P Q cert = true) {u : ℝ} (hu0 : (U0 : ℝ) / R < u)
     (hu1 : u ≤ (U1 : ℝ) / R) (hpos : 0 < u) (hlt : u < 1) {v : ℝ × ℝ}
@@ -558,13 +558,6 @@ def vFormsSLs (D : ℕ) (e : SegE) : List SL :=
 def lebSLs (D : ℕ) (r : RectM) : List SL :=
   [capXm D r, (capXm D r).sub (sSL 1), capYm D r, (capYm D r).sub (sSL 1)]
 
-/-- `cos θ / h`. -/
-def cSL (h : ℕ) : SL := ⟨([0], [0], Cp), 0, 0, 1, h⟩
-
-lemma val_cSL {h : ℕ} (hh : h ≠ 0) (u : ℝ) (c : ℝ × ℝ) :
-    (cSL h).val u c = (1 - u ^ 2) / (1 + u ^ 2) / h := by
-  simp only [SL.val, sden, cSL, aff, evalPL, eval_Cp, eval_cons, eval_nil]
-  simp [div_div]
 
 /-- The `tan` regime of one cap is certified on the region: `d* = n/m ≤ 1` and `d ≥ s`, `d ≥ c`
 at its four corners (`d` affine in the centre). -/
@@ -576,7 +569,7 @@ def tanAx (Q x0 x1 y0 y1 U0 U1 R : ℕ) (wx wy : Bool) (L : SL) : Option (ℕ ×
 
 def tanOk (Q x0 x1 y0 y1 U0 U1 R : ℕ) (wx wy : Bool) (D : ℕ) (r : RectM) : Bool :=
   tanAx Q x0 x1 y0 y1 U0 U1 R wx wy (capX D r.1.1) r.2.1 &&
-    tanAx Q x0 x1 y0 y1 U0 U1 R wx wy (capY D r.1.2.1) r.2.2
+    tanAx Q x0 x1 y0 y1 U0 U1 R wx wy (capY D r.1.2.1) r.2.2.1
 
 lemma tanAx_sound {Q x0 x1 y0 y1 U0 U1 R : ℕ} (hQ : 0 < Q) (hR : 0 < R) {wx wy : Bool} {L : SL}
     (hL : L.d ≠ 0) {mo : Option (ℕ × ℕ)} (h : tanAx Q x0 x1 y0 y1 U0 U1 R wx wy L mo = true) {u : ℝ}
@@ -605,6 +598,140 @@ lemma tanAx_sound {Q x0 x1 y0 y1 U0 U1 R : ℕ} (hQ : 0 < Q) (hR : 0 < R) {wx wy
       try norm_num at v1 v2
       constructor <;> linarith
 
+/-- An affine form signed on the region gives a scaled line signed on the region. -/
+lemma sl_sign {Q x0 x1 y0 y1 U0 U1 R : ℕ} (hQ : 0 < Q) (hR : 0 < R) {wx wy neg : Bool} {L : SL}
+    (hL : L.d ≠ 0) (h : cornersOk Q x0 x1 y0 y1 U0 U1 R wx wy neg L.P = true) {u : ℝ} (hu0 : 0 < u)
+    (hu1 : u < 1) (hb0 : (U0 : ℝ) / R ≤ u) (hb1 : u ≤ (U1 : ℝ) / R) :
+    ∀ p ∈ poly ((sideL Q x0 x1 y0 y1 wx wy).map (evalPL · u)),
+      if neg then L.val u p ≤ 0 else 0 ≤ L.val u p := by
+  intro p hp
+  have k := corners_sound hQ hR h hu0 hu1 hb0 hb1 p hp
+  have hd := sden_pos L hL hu0 hu1
+  cases neg
+  · exact div_nonneg (by simpa using k) hd.le
+  · exact div_nonpos_of_nonpos_of_nonneg (by simpa using k) hd.le
+
+/-- `x − q c₁` (`fst`) or `x − q c₂`: the anchor side of a centre coordinate. -/
+def ancPL (x q : ℕ) (fst : Bool) : PL :=
+  if fst then ([-(q : ℤ)], [0], [(x : ℤ)]) else ([0], [-(q : ℤ)], [(x : ℤ)])
+
+/-- The McCormick anchor `(xa, ya)/q` is a corner of the region on the same side in both
+coordinates: `(xa/q − c₁)(ya/q − c₂) ≥ 0`. -/
+def ancOk (Q x0 x1 y0 y1 U0 U1 R : ℕ) (wx wy : Bool) (xa ya q : ℕ) : Bool :=
+  (cornersOk Q x0 x1 y0 y1 U0 U1 R wx wy false (ancPL xa q true) &&
+    cornersOk Q x0 x1 y0 y1 U0 U1 R wx wy false (ancPL ya q false)) ||
+  (cornersOk Q x0 x1 y0 y1 U0 U1 R wx wy true (ancPL xa q true) &&
+    cornersOk Q x0 x1 y0 y1 U0 U1 R wx wy true (ancPL ya q false))
+
+/-- `c·α + s·β − 1` for scaled lines `α`, `β`, over `N · den α · den β`. -/
+def xiPL (A B : SL) : PL :=
+  addPL (addPL (mulPL (BernZ.mul Cp (sdenP B)) A.P) (mulPL (BernZ.mul Sp (sdenP A)) B.P))
+    ([0], [0], smul (-1) (BernZ.mul Np (BernZ.mul (sdenP A) (sdenP B))))
+
+lemma aff_xiPL (A B : SL) (hA : A.d ≠ 0) (hB : B.d ≠ 0) {u : ℝ} (hu0 : 0 < u) (hu1 : u < 1)
+    (p : ℝ × ℝ) : aff (evalPL (xiPL A B) u) p = (1 + u ^ 2) * sden A u * sden B u *
+      ((1 - u ^ 2) / (1 + u ^ 2) * A.val u p + 2 * u / (1 + u ^ 2) * B.val u p - 1) := by
+  have a := (sden_pos A hA hu0 hu1).ne'
+  have b := (sden_pos B hB hu0 hu1).ne'
+  have hN : (1 : ℝ) + u ^ 2 ≠ 0 := by positivity
+  rw [xiPL, aff_addPL, aff_addPL, aff_mulPL, aff_mulPL]
+  simp only [SL.val, BernZ.eval_mul, eval_sdenP, eval_Cp, eval_Sp, aff, evalPL, BernZ.eval_smul,
+    eval_Np, eval_cons, eval_nil]
+  field_simp
+  push_cast
+  ring
+
+/-- **The corner conditions** of a rectangle entry, certified on the region. -/
+def cornerOk (Q x0 x1 y0 y1 U0 U1 R : ℕ) (wx wy : Bool) (D : ℕ) (r : RectM) : Bool :=
+  let co := cornersOk Q x0 x1 y0 y1 U0 U1 R wx wy
+  match r.2.2.2 with
+  | .std => true
+  | .c3 xa ya _ q => Nat.blt 0 q && r.2.1.isNone && r.2.2.1.isNone &&
+      co false ((capX D r.1.1).sub (sSL 1)).P && co true (((capX D r.1.1).sub (sSL 1)).sub (cSL 1)).P &&
+      co true ((capY D r.1.2.1).sub (cSL 1)).P &&
+      co true (xiPL ((capX D r.1.1).sub (sSL 1)) (capY D r.1.2.1)) &&
+      ancOk Q x0 x1 y0 y1 U0 U1 R wx wy xa ya q
+  | .xc xa ya _ q => Nat.blt 0 q && r.2.1.isNone && r.2.2.1.isNone &&
+      co true ((capX D r.1.1).sub (sSL 1)).P && co true ((capY D r.1.2.1).sub (cSL 1)).P &&
+      ancOk Q x0 x1 y0 y1 U0 U1 R wx wy xa ya q
+
+lemma ancOk_sound {Q x0 x1 y0 y1 U0 U1 R : ℕ} (hQ : 0 < Q) (hR : 0 < R) {wx wy : Bool} {xa ya q : ℕ}
+    (hq : 0 < q) (h : ancOk Q x0 x1 y0 y1 U0 U1 R wx wy xa ya q = true) {u : ℝ} (hu0 : 0 < u)
+    (hu1 : u < 1) (hb0 : (U0 : ℝ) / R ≤ u) (hb1 : u ≤ (U1 : ℝ) / R) :
+    ∀ p ∈ poly ((sideL Q x0 x1 y0 y1 wx wy).map (evalPL · u)),
+      0 ≤ ((xa : ℝ) / q - p.1) * ((ya : ℝ) / q - p.2) := by
+  intro p hp
+  have hqr : (0 : ℝ) < q := by exact_mod_cast hq
+  have ex : aff (evalPL (ancPL xa q true) u) p = q * ((xa : ℝ) / q - p.1) := by
+    simp [ancPL, aff, evalPL]; field_simp; ring
+  have ey : aff (evalPL (ancPL ya q false) u) p = q * ((ya : ℝ) / q - p.2) := by
+    simp [ancPL, aff, evalPL]; field_simp; ring
+  simp only [ancOk, Bool.or_eq_true, Bool.and_eq_true] at h
+  rcases h with ⟨h1, h2⟩ | ⟨h1, h2⟩
+  · have k1 := corners_sound hQ hR h1 hu0 hu1 hb0 hb1 p hp
+    have k2 := corners_sound hQ hR h2 hu0 hu1 hb0 hb1 p hp
+    simp only [if_false, Bool.false_eq_true, ex, ey] at k1 k2
+    exact mul_nonneg (nonneg_of_mul_nonneg_right (by linarith) hqr)
+      (nonneg_of_mul_nonneg_right (by linarith) hqr)
+  · have k1 := corners_sound hQ hR h1 hu0 hu1 hb0 hb1 p hp
+    have k2 := corners_sound hQ hR h2 hu0 hu1 hb0 hb1 p hp
+    simp only [if_true, ex, ey] at k1 k2
+    have a1 : (xa : ℝ) / q - p.1 ≤ 0 := by nlinarith
+    have a2 : (ya : ℝ) / q - p.2 ≤ 0 := by nlinarith
+    exact mul_nonneg_of_nonpos_of_nonpos a1 a2
+
+lemma cornerOk_sound {Q x0 x1 y0 y1 U0 U1 R D : ℕ} (hQ : 0 < Q) (hR : 0 < R) (hD : 0 < D)
+    {wx wy : Bool} {r : RectM} (h : cornerOk Q x0 x1 y0 y1 U0 U1 R wx wy D r = true) {u : ℝ}
+    (hu0 : 0 < u) (hu1 : u < 1) (hb0 : (U0 : ℝ) / R ≤ u) (hb1 : u ≤ (U1 : ℝ) / R) :
+    ckOk r.2.2.2 = true ∧ ∀ p ∈ poly ((sideL Q x0 x1 y0 y1 wx wy).map (evalPL · u)),
+      KindOk (2 * Real.arctan u) D r p := by
+  have dX : (capX D r.1.1).d ≠ 0 := by simp [capX]; omega
+  have dY : (capY D r.1.2.1).d ≠ 0 := by simp [capY]; omega
+  have ds : (sSL 1).d ≠ 0 := by simp [sSL]
+  have dc : (cSL 1).d ≠ 0 := by simp [cSL]
+  have hN : (0 : ℝ) < 1 + u ^ 2 := by positivity
+  have h1u : (0 : ℝ) < 1 - u ^ 2 := by nlinarith
+  rcases r with ⟨Rr, m1, m2, k⟩
+  cases k with
+  | std => exact ⟨rfl, fun _ _ => trivial⟩
+  | c3 xa ya ym q =>
+    simp only [cornerOk, Bool.and_eq_true, Nat.blt_eq, Option.isNone_iff_eq_none] at h
+    obtain ⟨⟨⟨⟨⟨⟨⟨hq, rfl⟩, rfl⟩, k1⟩, k2⟩, k3⟩, k4⟩, k5⟩ := h
+    refine ⟨by simp [ckOk, hq], fun p hp => ?_⟩
+    have v1 := sl_sign hQ hR (sub_d dX ds) k1 hu0 hu1 hb0 hb1 p hp
+    have v2 := sl_sign hQ hR (sub_d (sub_d dX ds) dc) k2 hu0 hu1 hb0 hb1 p hp
+    have v3 := sl_sign hQ hR (sub_d dY dc) k3 hu0 hu1 hb0 hb1 p hp
+    have v4 := corners_sound hQ hR k4 hu0 hu1 hb0 hb1 p hp
+    have v5 := ancOk_sound hQ hR hq k5 hu0 hu1 hb0 hb1 p hp
+    simp only [if_true, if_false, Bool.false_eq_true] at v1 v2 v3 v4
+    try dsimp only at v1 v2 v3 v4 ⊢
+    rw [aff_xiPL _ _ (sub_d dX ds) dY hu0 hu1] at v4
+    have hpos : 0 < (1 + u ^ 2) * sden ((capX D Rr.1).sub (sSL 1)) u * sden (capY D Rr.2.1) u :=
+      mul_pos (mul_pos hN (sden_pos _ (sub_d dX ds) hu0 hu1)) (sden_pos _ dY hu0 hu1)
+    have v4' := nonpos_of_mul_nonpos_right v4 hpos
+    rw [val_sub _ _ dX ds hu0 hu1, val_capX hD hu0 hu1, val_sSL one_ne_zero] at v1 v4'
+    rw [val_sub _ _ (sub_d dX ds) dc hu0 hu1, val_sub _ _ dX ds hu0 hu1, val_capX hD hu0 hu1,
+      val_sSL one_ne_zero, val_cSL one_ne_zero] at v2
+    rw [val_sub _ _ dY dc hu0 hu1, val_capY hD hu0 hu1, val_cSL one_ne_zero] at v3
+    rw [val_capY hD hu0 hu1] at v4'
+    simp only [KindOk, (trig u).1, (trig u).2] at v1 v2 v3 v4' ⊢
+    push_cast at v1 v2 v3 v4'
+    refine ⟨trivial, trivial, by linarith, by linarith, by linarith, by linarith, v5⟩
+  | xc xa ya ym q =>
+    simp only [cornerOk, Bool.and_eq_true, Nat.blt_eq, Option.isNone_iff_eq_none] at h
+    obtain ⟨⟨⟨⟨⟨hq, rfl⟩, rfl⟩, k1⟩, k2⟩, k5⟩ := h
+    refine ⟨by simp [ckOk, hq], fun p hp => ?_⟩
+    have v1 := sl_sign hQ hR (sub_d dX ds) k1 hu0 hu1 hb0 hb1 p hp
+    have v3 := sl_sign hQ hR (sub_d dY dc) k2 hu0 hu1 hb0 hb1 p hp
+    have v5 := ancOk_sound hQ hR hq k5 hu0 hu1 hb0 hb1 p hp
+    simp only [if_true] at v1 v3
+    try dsimp only at v1 v3 ⊢
+    rw [val_sub _ _ dX ds hu0 hu1, val_capX hD hu0 hu1, val_sSL one_ne_zero] at v1
+    rw [val_sub _ _ dY dc hu0 hu1, val_capY hD hu0 hu1, val_cSL one_ne_zero] at v3
+    simp only [KindOk, (trig u).1, (trig u).2] at v1 v3 ⊢
+    push_cast at v1 v3
+    refine ⟨trivial, trivial, by linarith, by linarith, v5⟩
+
 /-- **The `EXACT` leaf test.** -/
 def exOk (D S R W x0 x1 y0 y1 U0 U1 : ℕ) (segs : List SegE) (rects : List RectE) (lf : ExLeaf) :
     Bool :=
@@ -618,7 +745,8 @@ def exOk (D S R W x0 x1 y0 y1 U0 U1 : ℕ) (segs : List SegE) (rects : List Rect
     lf.crs.all (fun r => rects.contains r.1 &&
       Nat.ble (2 * x1 * widD R U0 + D * S * widN R U0 U1) (2 * r.1.2.2.1 * S * widD R U0) &&
       Nat.ble (2 * y1 * widD R U0 + D * S * widN R U0 U1) (2 * r.1.2.2.2.1 * S * widD R U0) &&
-      (lebSLs D r).all pin && tanOk (D * S) x0 x1 y0 y1 U0 U1 R lf.wx lf.wy D r) &&
+      (lebSLs D r).all pin && tanOk (D * S) x0 x1 y0 y1 U0 U1 R lf.wx lf.wy D r &&
+      cornerOk (D * S) x0 x1 y0 y1 U0 U1 R lf.wx lf.wy D r) &&
     lf.hbx.length == lf.chs.length && lf.vbx.length == lf.cvs.length &&
     (lf.chs.zip lf.hbx).all (fun q => boxDomOk (D * S) x0 x1 y0 y1 U0 U1 R lf.wx lf.wy
       (hUps D q.1) (hLos D q.1) q.2) &&
@@ -639,7 +767,8 @@ def exHead (D S R W x0 x1 y0 y1 U0 U1 : ℕ) (segs : List SegE) (rects : List Re
     lf.crs.all (fun r => rects.contains r.1 &&
       Nat.ble (2 * x1 * widD R U0 + D * S * widN R U0 U1) (2 * r.1.2.2.1 * S * widD R U0) &&
       Nat.ble (2 * y1 * widD R U0 + D * S * widN R U0 U1) (2 * r.1.2.2.2.1 * S * widD R U0) &&
-      (lebSLs D r).all pin && tanOk (D * S) x0 x1 y0 y1 U0 U1 R lf.wx lf.wy D r) &&
+      (lebSLs D r).all pin && tanOk (D * S) x0 x1 y0 y1 U0 U1 R lf.wx lf.wy D r &&
+      cornerOk (D * S) x0 x1 y0 y1 U0 U1 R lf.wx lf.wy D r) &&
     lf.hbx.length == lf.chs.length && lf.vbx.length == lf.cvs.length &&
     (lf.chs.zip lf.hbx).all (fun q => boxDomOk (D * S) x0 x1 y0 y1 U0 U1 R lf.wx lf.wy
       (hUps D q.1) (hLos D q.1) q.2) &&
@@ -681,11 +810,13 @@ theorem CovMPo.of_exact {D S Mq R W x0 x1 y0 y1 U0 U1 : ℕ} {pts : List (ℕ ×
     have := (div_lt_one hRr).mpr this
     linarith
   have hb0 : (U0 : ℝ) / R ≤ u := hu0.le
-  have hmd : ∀ r ∈ lf.crs, modeP r.2.1 = true ∧ modeP r.2.2 = true := fun r hr => by
-    have htan := (hcrs r hr).2
+  have hmd : ∀ r ∈ lf.crs, modeP r.2.1 = true ∧ modeP r.2.2.1 = true ∧ ckOk r.2.2.2 = true :=
+    fun r hr => by
+    have htan := (hcrs r hr).1.2
     simp only [tanOk, Bool.and_eq_true] at htan
     exact ⟨(tanAx_sound hQ hR (L := capX D r.1.1) (by simp [capX]; omega) htan.1 hpos hlt hb0 hu1).1,
-      (tanAx_sound hQ hR (L := capY D r.1.2.1) (by simp [capY]; omega) htan.2 hpos hlt hb0 hu1).1⟩
+      (tanAx_sound hQ hR (L := capY D r.1.2.1) (by simp [capY]; omega) htan.2 hpos hlt hb0 hu1).1,
+      (cornerOk_sound hQ hR hD (hcrs r hr).2 hpos hlt hb0 hu1).1⟩
   set θ := 2 * Real.arctan u with hθ
   have hs : 0 < Real.sin θ := by rw [hθ, (trig u).1]; positivity
   have hc : 0 < Real.cos θ := by
@@ -733,13 +864,13 @@ theorem CovMPo.of_exact {D S Mq R W x0 x1 y0 y1 U0 U1 : ℕ} {pts : List (ℕ ×
     (fun e he => ⟨(hch e he).1.1.1, (hch e he).1.1.2, (hch e he).1.2⟩)
     (fun e he => ⟨(hcv e he).1.1.1, (hcv e he).1.1.2, (hcv e he).1.2⟩) hcr
     (fun r hr => by
-      obtain ⟨⟨⟨⟨hm, h1⟩, h2⟩, _⟩, htan⟩ := hcrs r hr
+      obtain ⟨⟨⟨⟨⟨hm, h1⟩, h2⟩, _⟩, htan⟩, hcor⟩ := hcrs r hr
       simp only [tanOk, Bool.and_eq_true] at htan
       have tx := (tanAx_sound hQ hR (L := capX D r.1.1) (by simp [capX]; omega) htan.1 hpos hlt hb0 hu1).2 c hcreg
       have ty := (tanAx_sound hQ hR (L := capY D r.1.2.1) (by simp [capY]; omega) htan.2 hpos hlt hb0 hu1).2 c hcreg
       rw [val_capX hD hpos hlt] at tx
       rw [val_capY hD hpos hlt] at ty
-      refine ⟨hm, fun p hp => ?_, ?_, ?_⟩
+      refine ⟨hm, fun p hp => ?_, ?_, ?_, (cornerOk_sound hQ hR hD hcor hpos hlt hb0 hu1).2 c hcreg⟩
       · obtain ⟨a1, a2⟩ := abs_sub_le_wid hp
         rw [abs_le] at a1 a2
         have k1 := add_half_le hD hS hwd h1
@@ -778,16 +909,16 @@ theorem CovMPo.of_exact {D S Mq R W x0 x1 y0 y1 U0 U1 : ℕ} {pts : List (ℕ ×
           (fun c => (val_vLX hD hpos hlt _ c).symm) (fun c => (val_vLY hD hpos hlt _ c).symm)
           (fun c => (val_vUX hD hpos hlt _ c).symm) (fun c => (val_vUY hD hpos hlt _ c).symm)
     · obtain ⟨r, hr, rfl⟩ := List.mem_map.mp hl
-      obtain ⟨⟨_, hpin⟩, htan⟩ := hcrs r hr
+      obtain ⟨⟨⟨_, hpin⟩, htan⟩, _⟩ := hcrs r hr
       have hp := hpin
       have hm := hmd r hr
       have dX : (capXm D r).d ≠ 0 := capXm_d hD r hm.1
-      have dY : (capYm D r).d ≠ 0 := capYm_d hD r hm.2
+      have dY : (capYm D r).d ≠ 0 := capYm_d hD r hm.2.1
       have ds : (sSL 1).d ≠ 0 := by simp [sSL]
       have ex : ∀ c, aff (rectT θ D r).2.1 c = (capXm D r).val u c := fun c =>
         (val_capXm hD hpos hlt r hm.1 c).symm
-      have ey : ∀ c, aff (rectT θ D r).2.2 c = (capYm D r).val u c := fun c =>
-        (val_capYm hD hpos hlt r hm.2 c).symm
+      have ey : ∀ c, aff (rectT θ D r).2.2.1 c = (capYm D r).val u c := fun c =>
+        (val_capYm hD hpos hlt r hm.2.1 c).symm
       have hsθ : Real.sin θ = 2 * u / (1 + u ^ 2) := by rw [hθ, (trig u).1]
       refine ⟨Nat.cast_nonneg _, pin_sound hQ hR (hp (capXm D r) (by simp [lebSLs])) dX hpos hlt hb0 hu1 ex,
         pin_sound hQ hR (hp ((capXm D r).sub (sSL 1)) (by simp [lebSLs])) (Nat.mul_ne_zero dX ds) hpos hlt hb0 hu1 ?_,
