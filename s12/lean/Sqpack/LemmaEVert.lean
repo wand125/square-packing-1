@@ -364,8 +364,10 @@ lemma lebVal_d (Δ X Y : Poly) {D : ℕ} (hD : 0 < D) (r : RectE) (mx my : ℕ) 
     (lebVal Δ X Y D r mx my).d ≠ 0 := by
   have a := ghU_d Δ X Y (capX D r.1) (by simp [capX]; omega) mx
   have b := ghU_d Δ X Y (capY D r.2.1) (by simp [capY]; omega) my
-  simp only [lebVal, RF.mul, RF.add, RF.const, RF.neg]
-  exact Nat.mul_ne_zero one_ne_zero (Nat.mul_ne_zero (Nat.mul_ne_zero one_ne_zero a) b)
+  simp only [lebVal]
+  refine Nat.mul_ne_zero one_ne_zero (RF.add_d Δ (RF.add_d Δ (by simp [RF.const]) ?_) ?_)
+  · simpa [RF.neg] using a
+  · simpa [RF.neg] using b
 
 /-- **A rectangle's term** is at least its certified value. -/
 theorem leb_ge {D : ℕ} (hD : 0 < D) {σ : Bool} {Δ X Y : Poly} {b0 b1 R : ℕ} {u δ : ℝ}
@@ -392,11 +394,10 @@ theorem leb_ge {D : ℕ} (hD : 0 < D) {σ : Bool} {Δ X Y : Poly} {b0 b1 R : ℕ
   have d1 : (RF.const 1 1).d ≠ 0 := by simp [RF.const]
   have d2 : (RF.neg (ghU Δ X Y (capX D r.1) mx)).d ≠ 0 := by simpa [RF.neg] using dx
   have d3 : (RF.neg (ghU Δ X Y (capY D r.2.1) my)).d ≠ 0 := by simpa [RF.neg] using dy
-  have d12 : (RF.add Δ (RF.const 1 1) (RF.neg (ghU Δ X Y (capX D r.1) mx))).d ≠ 0 := by
-    simp only [RF.add]; exact Nat.mul_ne_zero d1 d2
+  have d12 : (RF.add Δ (RF.const 1 1) (RF.neg (ghU Δ X Y (capX D r.1) mx))).d ≠ 0 :=
+    RF.add_d Δ d1 d2
   have d123 : (RF.add Δ (RF.add Δ (RF.const 1 1) (RF.neg (ghU Δ X Y (capX D r.1) mx)))
-      (RF.neg (ghU Δ X Y (capY D r.2.1) my))).d ≠ 0 := by
-    simp only [RF.add]; exact Nat.mul_ne_zero d12 d3
+      (RF.neg (ghU Δ X Y (capY D r.2.1) my))).d ≠ 0 := RF.add_d Δ d12 d3
   rw [lebVal, eval_mul h.ok (by simp [RF.const]) d123, eval_add h.ok h.hΔ d12 d3,
     eval_add h.ok h.hΔ d1 d2, eval_neg, eval_neg, eval_const, eval_const]
   simp only [rectT, Int.cast_one, Nat.cast_one, div_one, Int.cast_natCast]
@@ -411,8 +412,8 @@ def sumRF (Δ : Poly) : List RF → RF
 lemma sumRF_d (Δ : Poly) : ∀ rs : List RF, (∀ r ∈ rs, r.d ≠ 0) → (sumRF Δ rs).d ≠ 0
   | [], _ => by simp [sumRF, RF.const]
   | r :: rs, h => by
-    simp only [sumRF, RF.add]
-    exact Nat.mul_ne_zero (h r List.mem_cons_self)
+    simp only [sumRF]
+    exact RF.add_d Δ (h r List.mem_cons_self)
       (sumRF_d Δ rs fun x hx => h x (List.mem_cons_of_mem _ hx))
 
 lemma eval_sumRF {Δ : Poly} {δ u : ℝ} (h : Ok δ u) (hΔ : eval Δ u = δ) :

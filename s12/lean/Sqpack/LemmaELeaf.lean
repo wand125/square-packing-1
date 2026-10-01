@@ -293,14 +293,15 @@ def affRF (P : PL) (x y : RF) : RF :=
     ⟨P.2.2, 0, 0, 0, 0, 1⟩
 
 lemma affRF_d (P : PL) {x y : RF} (hx : x.d ≠ 0) (hy : y.d ≠ 0) : (affRF P x y).d ≠ 0 := by
-  simp only [affRF, RF.add, RF.mul]; simp [hx, hy]
+  simp only [affRF]
+  exact RF.add_d _ (RF.add_d _ (by simp [RF.mul, hx]) (by simp [RF.mul, hy])) (by simp)
 
 lemma eval_affRF (P : PL) {x y : RF} (hx : x.d ≠ 0) (hy : y.d ≠ 0) {u : ℝ} (hu0 : 0 < u)
     (hu1 : u < 1) : (affRF P x y).eval 1 u = aff (evalPL P u) (x.eval 1 u, y.eval 1 u) := by
   have ok : Ok 1 u := ⟨hu0, hu1, one_ne_zero⟩
   have e1 : BernZ.eval [1] u = 1 := by simp
   unfold affRF
-  rw [eval_add ok e1 (by simp [RF.add, RF.mul, hx, hy]) (by simp),
+  rw [eval_add ok e1 (RF.add_d _ (by simp [RF.mul, hx]) (by simp [RF.mul, hy])) (by simp),
     eval_add ok e1 (by simp [RF.mul, hx]) (by simp [RF.mul, hy]), eval_mul ok (by simp) hx,
     eval_mul ok (by simp) hy]
   simp [RF.eval, den, aff, evalPL]

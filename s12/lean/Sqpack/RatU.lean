@@ -58,12 +58,16 @@ def raise (Δ : Poly) (r : RF) (a b c g m : ℕ) : RF :=
   ⟨mul (smul (m : ℤ) r.num) (mul (ppow Δ a) (mul (ppow Cp b) (mul (ppow Sp c) (ppow Np g)))),
     r.e + a, r.i + b, r.j + c, r.k + g, r.d * m⟩
 
-/-- The sum, over the common denominator. -/
+/-- The sum, over the common denominator (the constants aligned to their least common multiple). -/
 def RF.add (Δ : Poly) (r s : RF) : RF :=
   let e := max r.e s.e; let i := max r.i s.i; let j := max r.j s.j; let k := max r.k s.k
-  let r' := raise Δ r (e - r.e) (i - r.i) (j - r.j) (k - r.k) s.d
-  let s' := raise Δ s (e - s.e) (i - s.i) (j - s.j) (k - s.k) r.d
-  ⟨BernZ.add r'.num s'.num, e, i, j, k, r.d * s.d⟩
+  let l := Nat.lcm r.d s.d
+  let r' := raise Δ r (e - r.e) (i - r.i) (j - r.j) (k - r.k) (l / r.d)
+  let s' := raise Δ s (e - s.e) (i - s.i) (j - s.j) (k - s.k) (l / s.d)
+  ⟨BernZ.add r'.num s'.num, e, i, j, k, l⟩
+
+lemma RF.add_d (Δ : Poly) {r s : RF} (hr : r.d ≠ 0) (hs : s.d ≠ 0) : (RF.add Δ r s).d ≠ 0 :=
+  Nat.lcm_ne_zero hr hs
 
 def RF.mul (r s : RF) : RF := ⟨BernZ.mul r.num s.num, r.e + s.e, r.i + s.i, r.j + s.j, r.k + s.k, r.d * s.d⟩
 
@@ -102,10 +106,18 @@ lemma eval_raise {Δ : Poly} {r : RF} {δ u : ℝ} (h : Ok δ u) (hΔ : BernZ.ev
 lemma eval_add {Δ : Poly} {r s : RF} {δ u : ℝ} (h : Ok δ u) (hΔ : BernZ.eval Δ u = δ)
     (hr : r.d ≠ 0) (hs : s.d ≠ 0) :
     (RF.add Δ r s).eval δ u = r.eval δ u + s.eval δ u := by
+  set l := Nat.lcm r.d s.d with hl
+  have hl0 : 0 < l := Nat.lcm_pos (Nat.pos_of_ne_zero hr) (Nat.pos_of_ne_zero hs)
+  have hmr : l / r.d ≠ 0 := (Nat.div_pos (Nat.le_of_dvd hl0 (Nat.dvd_lcm_left _ _))
+    (Nat.pos_of_ne_zero hr)).ne'
+  have hms : l / s.d ≠ 0 := (Nat.div_pos (Nat.le_of_dvd hl0 (Nat.dvd_lcm_right _ _))
+    (Nat.pos_of_ne_zero hs)).ne'
+  have cr : r.d * (l / r.d) = l := Nat.mul_div_cancel' (Nat.dvd_lcm_left _ _)
+  have cs : s.d * (l / s.d) = l := Nat.mul_div_cancel' (Nat.dvd_lcm_right _ _)
   have e1 := eval_raise (r := r) (a := max r.e s.e - r.e) (b := max r.i s.i - r.i)
-    (c := max r.j s.j - r.j) (g := max r.k s.k - r.k) h hΔ hr hs
+    (c := max r.j s.j - r.j) (g := max r.k s.k - r.k) h hΔ hr hmr
   have e2 := eval_raise (r := s) (a := max r.e s.e - s.e) (b := max r.i s.i - s.i)
-    (c := max r.j s.j - s.j) (g := max r.k s.k - s.k) h hΔ hs hr
+    (c := max r.j s.j - s.j) (g := max r.k s.k - s.k) h hΔ hs hms
   rw [← e1, ← e2]
   simp only [RF.eval, RF.add, raise, den, BernZ.eval_add]
   have k1 : r.e + (max r.e s.e - r.e) = max r.e s.e := by omega
@@ -116,7 +128,7 @@ lemma eval_add {Δ : Poly} {r s : RF} {δ u : ℝ} (h : Ok δ u) (hΔ : BernZ.ev
   have k6 : s.i + (max r.i s.i - s.i) = max r.i s.i := by omega
   have k7 : s.j + (max r.j s.j - s.j) = max r.j s.j := by omega
   have k8 : s.k + (max r.k s.k - s.k) = max r.k s.k := by omega
-  rw [k1, k2, k3, k4, k5, k6, k7, k8, mul_comm s.d r.d, add_div]
+  rw [k1, k2, k3, k4, k5, k6, k7, k8, ← hl, cr, cs, add_div]
 
 lemma eval_mul {r s : RF} {δ u : ℝ} (h : Ok δ u) (hr : r.d ≠ 0) (hs : s.d ≠ 0) :
     (RF.mul r s).eval δ u = r.eval δ u * s.eval δ u := by
