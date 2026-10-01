@@ -475,6 +475,56 @@ theorem le_minSide_mixedP (D S Mq R Um W : ℕ) (pts : PTree) (segs : STree) (re
   by_contra hlt
   exact not_packs_of_measure m M.measure hcover n htot (not_le.mp hlt) hs
 
+/-! ## Boxes open at the lower end of the angle bin -/
+
+/-- `CovMP` for the angles `u ∈ (u0/R, u1/R]` (open at `u0`; Lemma E's leaves). -/
+def CovMPo (D S Mq R W : ℕ) (pts : List (ℕ × ℕ × ℕ)) (segs : List SegE) (rects : List RectE)
+    (x0 x1 y0 y1 u0 u1 : ℕ) : Prop :=
+  ∀ (c : ℝ × ℝ) (u : ℝ),
+    (x0 : ℝ) / (D * S) ≤ c.1 → c.1 ≤ (x1 : ℝ) / (D * S) →
+    (y0 : ℝ) / (D * S) ≤ c.2 → c.2 ≤ (y1 : ℝ) / (D * S) →
+    (u0 : ℝ) / R < u → u ≤ (u1 : ℝ) / R →
+    sq c (2 * Real.arctan u) 1 ⊆ box ((Mq : ℝ) / D) →
+    (W : ℝ) ≤ ptMass D pts (sq c (2 * Real.arctan u) 1) + segMass D segs (sq c (2 * Real.arctan u) 1)
+      + rectMass D rects (sq c (2 * Real.arctan u) 1)
+
+theorem CovMPo.of_covMP (h : CovMP D S Mq R W pts segs rects x0 x1 y0 y1 u0 u1) :
+    CovMPo D S Mq R W pts segs rects x0 x1 y0 y1 u0 u1 :=
+  fun c u hx0 hx1 hy0 hy1 hu0 hu1 hsub => h c u hx0 hx1 hy0 hy1 hu0.le hu1 hsub
+
+theorem CovMPo.splitX (m : ℕ) (h1 : CovMPo D S Mq R W pts segs rects x0 m y0 y1 u0 u1)
+    (h2 : CovMPo D S Mq R W pts segs rects m x1 y0 y1 u0 u1) :
+    CovMPo D S Mq R W pts segs rects x0 x1 y0 y1 u0 u1 := by
+  intro c u hx0 hx1 hy0 hy1 hu0 hu1 hsub
+  rcases le_total c.1 ((m : ℝ) / (D * S)) with h | h
+  · exact h1 c u hx0 h hy0 hy1 hu0 hu1 hsub
+  · exact h2 c u h hx1 hy0 hy1 hu0 hu1 hsub
+
+theorem CovMPo.splitY (m : ℕ) (h1 : CovMPo D S Mq R W pts segs rects x0 x1 y0 m u0 u1)
+    (h2 : CovMPo D S Mq R W pts segs rects x0 x1 m y1 u0 u1) :
+    CovMPo D S Mq R W pts segs rects x0 x1 y0 y1 u0 u1 := by
+  intro c u hx0 hx1 hy0 hy1 hu0 hu1 hsub
+  rcases le_total c.2 ((m : ℝ) / (D * S)) with h | h
+  · exact h1 c u hx0 hx1 hy0 h hu0 hu1 hsub
+  · exact h2 c u hx0 hx1 h hy1 hu0 hu1 hsub
+
+theorem CovMPo.splitU (m : ℕ) (h1 : CovMPo D S Mq R W pts segs rects x0 x1 y0 y1 u0 m)
+    (h2 : CovMPo D S Mq R W pts segs rects x0 x1 y0 y1 m u1) :
+    CovMPo D S Mq R W pts segs rects x0 x1 y0 y1 u0 u1 := by
+  intro c u hx0 hx1 hy0 hy1 hu0 hu1 hsub
+  rcases le_or_gt u ((m : ℝ) / R) with h | h
+  · exact h1 c u hx0 hx1 hy0 hy1 hu0 h hsub
+  · exact h2 c u hx0 hx1 hy0 hy1 h hu1 hsub
+
+/-- The closed face `u = u0/R` and the open rest give the closed bin. -/
+theorem CovMP.of_face (h0 : CovMP D S Mq R W pts segs rects x0 x1 y0 y1 u0 u0)
+    (h1 : CovMPo D S Mq R W pts segs rects x0 x1 y0 y1 u0 u1) :
+    CovMP D S Mq R W pts segs rects x0 x1 y0 y1 u0 u1 := by
+  intro c u hx0 hx1 hy0 hy1 hu0 hu1 hsub
+  rcases eq_or_lt_of_le hu0 with h | h
+  · exact h0 c u hx0 hx1 hy0 hy1 hu0 h.symm.le hsub
+  · exact h1 c u hx0 hx1 hy0 hy1 h hu1 hsub
+
 end ZMTreeM
 
 end SquarePacking

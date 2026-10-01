@@ -226,6 +226,190 @@ lemma allPairs_sound {D W R U0 U1 : ℕ} {side : List PL} {chs cvs : List SegE} 
       obtain ⟨c, hc⟩ := allPairs_sound Ps css hrest i j' (by omega) (by simpa using hj)
       exact ⟨c, by simpa using hc⟩
 
+/-! ## 4.  The region and the pinning of forms -/
+
+/-- The region's four sides: the lower `x` side is the box side `Q x ≥ x0` or the wall
+`2N x ≥ C + S` (`x ≥ w/2`), the upper side `Q x ≤ x1`; likewise in `y`. -/
+def sideL (Q x0 x1 y0 y1 : ℕ) (wx wy : Bool) : List PL :=
+  [if wx then (smul 2 Np, [0], smul (-1) (BernZ.add Cp Sp)) else ([(Q : ℤ)], [0], [-(x0 : ℤ)]),
+    ([-(Q : ℤ)], [0], [(x1 : ℤ)]),
+    if wy then ([0], smul 2 Np, smul (-1) (BernZ.add Cp Sp)) else ([0], [(Q : ℤ)], [-(y0 : ℤ)]),
+    ([0], [-(Q : ℤ)], [(y1 : ℤ)])]
+
+/-- The lower ends of the region (`RF`s without `Δ`). -/
+def loX (Q x0 : ℕ) (wx : Bool) : RF := if wx then ⟨BernZ.add Cp Sp, 0, 0, 0, 1, 2⟩ else RF.const x0 Q
+
+lemma eval_loX {Q x0 : ℕ} (hQ : 0 < Q) (wx : Bool) (δ u : ℝ) :
+    (loX Q x0 wx).eval δ u = if wx then (1 - u ^ 2 + 2 * u) / (2 * (1 + u ^ 2)) else (x0 : ℝ) / Q := by
+  unfold loX; split_ifs
+  · simp only [RF.eval, den, BernZ.eval_add, eval_Cp, eval_Sp]; push_cast; ring
+  · rw [eval_const]; push_cast; rfl
+
+/-- The region is the rectangle `[loX, x1/Q] × [loY, y1/Q]`. -/
+lemma mem_region {Q x0 x1 y0 y1 : ℕ} (hQ : 0 < Q) {wx wy : Bool} {u : ℝ} {p : ℝ × ℝ}
+    (hp : p ∈ poly ((sideL Q x0 x1 y0 y1 wx wy).map (evalPL · u))) :
+    (loX Q x0 wx).eval 1 u ≤ p.1 ∧ p.1 ≤ (x1 : ℝ) / Q ∧ (loX Q y0 wy).eval 1 u ≤ p.2 ∧
+      p.2 ≤ (y1 : ℝ) / Q := by
+  have hQr : (0 : ℝ) < Q := by exact_mod_cast hQ
+  have hN : (0 : ℝ) < 1 + u ^ 2 := by positivity
+  have h := fun C (hC : C ∈ sideL Q x0 x1 y0 y1 wx wy) => hp _ (List.mem_map_of_mem hC)
+  simp only [sideL, List.mem_cons, List.not_mem_nil, or_false, forall_eq_or_imp, forall_eq] at h
+  obtain ⟨h1, h2, h3, h4⟩ := h
+  rw [eval_loX hQ, eval_loX hQ]
+  refine ⟨?_, ?_, ?_, ?_⟩
+  · split_ifs at h1 ⊢
+    · simp only [evalPL, eval_smul, eval_Np, BernZ.eval_add, eval_Cp, eval_Sp, eval_cons, eval_nil]
+        at h1
+      push_cast at h1
+      rw [div_le_iff₀ (by positivity)]; nlinarith
+    · simp only [evalPL, eval_cons, eval_nil] at h1
+      push_cast at h1
+      rw [div_le_iff₀ hQr]; nlinarith
+  · simp only [evalPL, eval_cons, eval_nil] at h2
+    push_cast at h2
+    rw [le_div_iff₀ hQr]; nlinarith
+  · split_ifs at h3 ⊢
+    · simp only [evalPL, eval_smul, eval_Np, BernZ.eval_add, eval_Cp, eval_Sp, eval_cons, eval_nil]
+        at h3
+      push_cast at h3
+      rw [div_le_iff₀ (by positivity)]; nlinarith
+    · simp only [evalPL, eval_cons, eval_nil] at h3
+      push_cast at h3
+      rw [div_le_iff₀ hQr]; nlinarith
+  · simp only [evalPL, eval_cons, eval_nil] at h4
+    push_cast at h4
+    rw [le_div_iff₀ hQr]; nlinarith
+
+lemma region_bounded {Q x0 x1 y0 y1 : ℕ} (hQ : 0 < Q) (wx wy : Bool) (u : ℝ) :
+    Bornology.IsBounded (poly ((sideL Q x0 x1 y0 y1 wx wy).map (evalPL · u))) := by
+  refine (Metric.isBounded_Icc ((loX Q x0 wx).eval 1 u, (loX Q y0 wy).eval 1 u)
+    ((x1 : ℝ) / Q, (y1 : ℝ) / Q)).subset fun p hp => ?_
+  obtain ⟨a, b, c, d⟩ := mem_region hQ hp
+  exact ⟨⟨a, c⟩, ⟨b, d⟩⟩
+
+/-- The value of a line at a point given by two `RF`s (no `Δ`: pass `Δ = [1]`). -/
+def affRF (P : PL) (x y : RF) : RF :=
+  RF.add [1] (RF.add [1] (RF.mul ⟨P.1, 0, 0, 0, 0, 1⟩ x) (RF.mul ⟨P.2.1, 0, 0, 0, 0, 1⟩ y))
+    ⟨P.2.2, 0, 0, 0, 0, 1⟩
+
+lemma affRF_d (P : PL) {x y : RF} (hx : x.d ≠ 0) (hy : y.d ≠ 0) : (affRF P x y).d ≠ 0 := by
+  simp only [affRF, RF.add, RF.mul]; simp [hx, hy]
+
+lemma eval_affRF (P : PL) {x y : RF} (hx : x.d ≠ 0) (hy : y.d ≠ 0) {u : ℝ} (hu0 : 0 < u)
+    (hu1 : u < 1) : (affRF P x y).eval 1 u = aff (evalPL P u) (x.eval 1 u, y.eval 1 u) := by
+  have ok : Ok 1 u := ⟨hu0, hu1, one_ne_zero⟩
+  have e1 : BernZ.eval [1] u = 1 := by simp
+  unfold affRF
+  rw [eval_add ok e1 (by simp [RF.add, RF.mul, hx, hy]) (by simp),
+    eval_add ok e1 (by simp [RF.mul, hx]) (by simp [RF.mul, hy]), eval_mul ok (by simp) hx,
+    eval_mul ok (by simp) hy]
+  simp [RF.eval, den, aff, evalPL]
+
+/-- A form is `≥ 0` (`neg = false`) or `≤ 0` (`neg = true`) at the four corners of the region. -/
+def cornersOk (Q x0 x1 y0 y1 U0 U1 R : ℕ) (wx wy neg : Bool) (P : PL) : Bool :=
+  [(loX Q x0 wx, loX Q y0 wy), (loX Q x0 wx, RF.const y1 Q), (RF.const x1 Q, loX Q y0 wy),
+    (RF.const x1 Q, RF.const y1 Q)].all fun q =>
+    ckRF true (if neg then RF.neg (affRF P q.1 q.2) else affRF P q.1 q.2) U0 U1 R
+
+lemma affine_nonneg_rect {a b k xl xh yl yh x y : ℝ} (hx0 : xl ≤ x) (hx1 : x ≤ xh) (hy0 : yl ≤ y)
+    (hy1 : y ≤ yh) (c00 : 0 ≤ a * xl + b * yl + k) (c01 : 0 ≤ a * xl + b * yh + k)
+    (c10 : 0 ≤ a * xh + b * yl + k) (c11 : 0 ≤ a * xh + b * yh + k) : 0 ≤ a * x + b * y + k := by
+  rcases le_total 0 a with ha | ha <;> rcases le_total 0 b with hb | hb
+  · nlinarith [mul_le_mul_of_nonneg_left hx0 ha, mul_le_mul_of_nonneg_left hy0 hb]
+  · nlinarith [mul_le_mul_of_nonneg_left hx0 ha, mul_le_mul_of_nonpos_left hy1 hb]
+  · nlinarith [mul_le_mul_of_nonpos_left hx1 ha, mul_le_mul_of_nonneg_left hy0 hb]
+  · nlinarith [mul_le_mul_of_nonpos_left hx1 ha, mul_le_mul_of_nonpos_left hy1 hb]
+
+/-- **The corner test**: a form `≥ 0` (or `≤ 0`) at the four corners has that sign on the region. -/
+lemma corners_sound {Q x0 x1 y0 y1 U0 U1 R : ℕ} (hQ : 0 < Q) (hR : 0 < R) {wx wy neg : Bool}
+    {P : PL} (h : cornersOk Q x0 x1 y0 y1 U0 U1 R wx wy neg P = true) {u : ℝ} (hu0 : 0 < u)
+    (hu1 : u < 1) (hb0 : (U0 : ℝ) / R ≤ u) (hb1 : u ≤ (U1 : ℝ) / R) :
+    ∀ p ∈ poly ((sideL Q x0 x1 y0 y1 wx wy).map (evalPL · u)),
+      if neg then aff (evalPL P u) p ≤ 0 else 0 ≤ aff (evalPL P u) p := by
+  intro p hp
+  obtain ⟨hx0, hx1, hy0, hy1⟩ := mem_region hQ hp
+  have ok : Ok 1 u := ⟨hu0, hu1, one_ne_zero⟩
+  have dl : ∀ (z : ℕ) (w : Bool), (loX Q z w).d ≠ 0 := by
+    intro z w; unfold loX; split_ifs <;> simp [RF.const] <;> omega
+  have dc : ∀ z : ℕ, (RF.const z Q).d ≠ 0 := by intro z; simp [RF.const]; omega
+  have hcx : ∀ z : ℕ, (RF.const z Q).eval 1 u = (z : ℝ) / Q := by
+    intro z; rw [eval_const]; push_cast; rfl
+  simp only [cornersOk, List.all_cons, List.all_nil, Bool.and_true, Bool.and_eq_true] at h
+  obtain ⟨c1, c2, c3, c4⟩ := h
+  have val : ∀ (x y : RF), x.d ≠ 0 → y.d ≠ 0 →
+      ckRF true (if neg then RF.neg (affRF P x y) else affRF P x y) U0 U1 R = true →
+      if neg then aff (evalPL P u) (x.eval 1 u, y.eval 1 u) ≤ 0
+        else 0 ≤ aff (evalPL P u) (x.eval 1 u, y.eval 1 u) := by
+    intro x y hx hy hc
+    have hd : (if neg then RF.neg (affRF P x y) else affRF P x y).d ≠ 0 := by
+      split_ifs <;> simp [RF.neg, affRF_d P hx hy]
+    have h0 := nonneg_of_checkRF hc hR ok (by simp) hd hb0 hb1
+    split_ifs at h0 ⊢
+    · rw [eval_neg, eval_affRF P hx hy hu0 hu1] at h0; linarith
+    · rwa [eval_affRF P hx hy hu0 hu1] at h0
+  have v1 := val _ _ (dl x0 wx) (dl y0 wy) c1
+  have v2 := val _ _ (dl x0 wx) (dc y1) c2
+  have v3 := val _ _ (dc x1) (dl y0 wy) c3
+  have v4 := val _ _ (dc x1) (dc y1) c4
+  rw [hcx] at v2 v3 v4
+  rw [hcx] at v4
+  simp only [aff, evalPL] at v1 v2 v3 v4 ⊢
+  split_ifs at v1 v2 v3 v4 ⊢
+  · have := affine_nonneg_rect (a := -eval P.1 u) (b := -eval P.2.1 u) (k := -eval P.2.2 u)
+      hx0 hx1 hy0 hy1 (by linarith) (by linarith) (by linarith) (by linarith)
+    linarith
+  · exact affine_nonneg_rect hx0 hx1 hy0 hy1 v1 v2 v3 v4
+
+/-! ### Pinning -/
+
+/-- A scaled line is pinned: its line is in `Ls`, or it is `≥ 0` / `≤ 0` at the corners. -/
+def pinOk (Q x0 x1 y0 y1 U0 U1 R : ℕ) (wx wy : Bool) (Ls : List PL) (L : SL) : Bool :=
+  Ls.contains L.P || cornersOk Q x0 x1 y0 y1 U0 U1 R wx wy false L.P ||
+    cornersOk Q x0 x1 y0 y1 U0 U1 R wx wy true L.P
+
+lemma pin_sound {Q x0 x1 y0 y1 U0 U1 R : ℕ} (hQ : 0 < Q) (hR : 0 < R) {wx wy : Bool}
+    {Ls : List PL} {L : SL} (h : pinOk Q x0 x1 y0 y1 U0 U1 R wx wy Ls L = true) (hd : L.d ≠ 0)
+    {u : ℝ} (hu0 : 0 < u) (hu1 : u < 1) (hb0 : (U0 : ℝ) / R ≤ u) (hb1 : u ≤ (U1 : ℝ) / R)
+    {F : ℝ × ℝ × ℝ} (hF : ∀ c, aff F c = L.val u c) :
+    Pinned (poly ((sideL Q x0 x1 y0 y1 wx wy).map (evalPL · u))) (Ls.map (evalPL · u)) F := by
+  simp only [pinOk, Bool.or_eq_true, List.contains_iff_mem] at h
+  have hsd := sden_pos L hd hu0 hu1
+  rcases h with (h | h) | h
+  · exact Or.inl (posMul_of_SL L hd hu0 hu1 hF (List.mem_map_of_mem h))
+  · right; left; intro p hp
+    have := corners_sound hQ hR h hu0 hu1 hb0 hb1 p hp
+    simp only [Bool.false_eq_true, if_false] at this
+    rw [hF, SL.val]; exact div_nonneg this hsd.le
+  · right; right; intro p hp
+    have := corners_sound hQ hR h hu0 hu1 hb0 hb1 p hp
+    simp only [if_true] at this
+    rw [hF, SL.val]; exact div_nonpos_of_nonpos_of_nonneg this hsd.le
+
+/-- The scaled lines of `formsOf`, in the same order. -/
+def formsSL (A B lo1 lo2 up1 up2 : SL) : List SL :=
+  [up1.sub A, up2.sub A, B.sub lo1, B.sub lo2, up1.sub lo1, up1.sub lo2, up2.sub lo1, up2.sub lo2]
+
+lemma formsSL_match {u : ℝ} (hu0 : 0 < u) (hu1 : u < 1) {A B : ℝ} {lo1 lo2 up1 up2 : ℝ × ℝ × ℝ}
+    {A' B' lo1' lo2' up1' up2' : SL} (dA : A'.d ≠ 0) (dB : B'.d ≠ 0) (d1 : lo1'.d ≠ 0)
+    (d2 : lo2'.d ≠ 0) (d3 : up1'.d ≠ 0) (d4 : up2'.d ≠ 0)
+    (eA : ∀ c, A'.val u c = A) (eB : ∀ c, B'.val u c = B) (e1 : ∀ c, aff lo1 c = lo1'.val u c)
+    (e2 : ∀ c, aff lo2 c = lo2'.val u c) (e3 : ∀ c, aff up1 c = up1'.val u c)
+    (e4 : ∀ c, aff up2 c = up2'.val u c) :
+    ∀ F ∈ formsOf A B lo1 lo2 up1 up2, ∃ L ∈ formsSL A' B' lo1' lo2' up1' up2', L.d ≠ 0 ∧
+      ∀ c, aff F c = L.val u c := by
+  intro F hF
+  simp only [formsOf, List.mem_cons, List.not_mem_nil, or_false] at hF
+  simp only [formsSL, List.mem_cons, List.not_mem_nil, or_false, exists_eq_or_imp, exists_eq_left]
+  rcases hF with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl
+  · left; exact ⟨Nat.mul_ne_zero d3 dA, fun c => by rw [aff_subF, aff_constF, val_sub _ _ d3 dA hu0 hu1, e3, eA]⟩
+  · right; left; exact ⟨Nat.mul_ne_zero d4 dA, fun c => by rw [aff_subF, aff_constF, val_sub _ _ d4 dA hu0 hu1, e4, eA]⟩
+  · right; right; left; exact ⟨Nat.mul_ne_zero dB d1, fun c => by rw [aff_subF, aff_constF, val_sub _ _ dB d1 hu0 hu1, e1, eB]⟩
+  · right; right; right; left; exact ⟨Nat.mul_ne_zero dB d2, fun c => by rw [aff_subF, aff_constF, val_sub _ _ dB d2 hu0 hu1, e2, eB]⟩
+  · right; right; right; right; left; exact ⟨Nat.mul_ne_zero d3 d1, fun c => by rw [aff_subF, val_sub _ _ d3 d1 hu0 hu1, e3, e1]⟩
+  · right; right; right; right; right; left; exact ⟨Nat.mul_ne_zero d3 d2, fun c => by rw [aff_subF, val_sub _ _ d3 d2 hu0 hu1, e3, e2]⟩
+  · right; right; right; right; right; right; left; exact ⟨Nat.mul_ne_zero d4 d1, fun c => by rw [aff_subF, val_sub _ _ d4 d1 hu0 hu1, e4, e1]⟩
+  · right; right; right; right; right; right; right; exact ⟨Nat.mul_ne_zero d4 d2, fun c => by rw [aff_subF, val_sub _ _ d4 d2 hu0 hu1, e4, e2]⟩
+
 end LemmaELeaf
 
 end SquarePacking
