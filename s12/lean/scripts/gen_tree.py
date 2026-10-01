@@ -36,6 +36,8 @@ class Glue:
 
     def leaf(self, box, kind, rects_list):
         dk = "(by decide)"
+        if box[4] == box[5]:
+            return "CovT.of_degen"
         if kind == 'EMPTY':
             return f"(CovT.of_empty {dk} {dk} {dk} {dk} {dk})"
         if kind == 'SYM':

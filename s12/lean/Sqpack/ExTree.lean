@@ -81,6 +81,11 @@ theorem CovT.of_top_zero (hR : 0 < R) : CovT D S Mq R W pts segs rects x0 x1 y0 
   have : (0 : ℝ) ≤ (u0 : ℝ) / R := div_nonneg (Nat.cast_nonneg _) hRr.le
   simp at hu1; linarith
 
+/-- A bin of width zero has no pose with `u₀/R < u ≤ u₀/R`. -/
+theorem CovT.of_degen : CovT D S Mq R W pts segs rects x0 x1 y0 y1 u0 u0 := by
+  intro c u _ _ _ _ hu0 hu1 _ _
+  linarith
+
 /-- **`SYM`**: a bin past `45°` (`U₀² + 2U₀R > R²`) has no pose with `θ ≤ 45°`. -/
 theorem CovT.of_sym (hR : 0 < R) (h : Nat.blt (R * R) (u0 * u0 + 2 * u0 * R) = true) :
     CovT D S Mq R W pts segs rects x0 x1 y0 y1 u0 u1 := by

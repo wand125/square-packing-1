@@ -93,7 +93,7 @@ def work(args):
     g = Glue(D, SG, RG, W, MQ)
     body, fails, how = [], [], []
     for n, (_, b, k) in enumerate(leaves_of(tree)):
-        if k in SIMPLE:
+        if k in SIMPLE or b[4] == b[5]:
             continue
         lf, why, Sl, Rl = certify(b)
         how.append(why)
