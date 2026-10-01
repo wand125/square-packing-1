@@ -7,7 +7,7 @@ Box: centres [x0, x1] x [y0, y1] over Q = D*S, angles u in (U0/R, U1/R].  The se
 only to choose; every decision is re-checked with the exact mirror `lemmae_mirror.py`, which computes
 what the kernel computes.
 """
-import sys, time, argparse
+import os, sys, time, argparse
 from fractions import Fraction as Fr
 from lemmae_mirror import *
 from gen_axis import read_cover
@@ -36,6 +36,8 @@ def svals(L, u, v):
 
 class Leaf:
     USE_TAN = True
+    # prefer the box-wide alternatives unless the vertex ones cut the combinations by this factor
+    BOX_FACTOR = float(os.environ.get('V7_BOX_FACTOR', '1'))
     USE_CORNER = True
     ANCHOR = 'hi'
 
@@ -182,7 +184,8 @@ class Leaf:
                     Ua |= {i for i in range(3) if uv[i] <= mu + tol}
                     La |= {i for i in range(3) if lv[i] >= ml - tol}
             if not any(posl): return [(('drop',), None)]
-            ch = ('box',) if len(bx[0]) * len(bx[1]) == 1 or len(bx[0]) * len(bx[1]) <= len(Ua) * len(La) \
+            ch = ('box',) if len(bx[0]) * len(bx[1]) == 1 or \
+                len(bx[0]) * len(bx[1]) <= Leaf.BOX_FACTOR * len(Ua) * len(La) \
                 else ('alt', sorted(Ua), sorted(La))
             if ch[0] == 'alt' and not segOkA(sig, Dp, X, Y, b0, b1, R, ups, los, ch[1], ch[2]):
                 # options crossing inside the sub-bin: widen by float closeness, else the box choice
