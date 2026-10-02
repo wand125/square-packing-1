@@ -64,8 +64,12 @@ def certify(b):
     # (the rectangle term `1 - U_x - U_y` goes below 0 where the square barely meets the rectangle)
     tries = [('hi', True, True, True), ('hi', True, True, False), ('lo', True, True, True),
              ('hi', False, True, True), ('hi', False, False, True)]
-    last = None
+    log = []
+    timed_out = False
     for anchor, corner, tan, rect in tries:
+        if timed_out and rect:
+            # the other modes only help where a check fails; a slow leaf needs a longer limit (V7_LIMIT)
+            continue
         G.Leaf.ANCHOR, G.Leaf.USE_CORNER, G.Leaf.USE_TAN = anchor, corner, tan
         lf = G.Leaf(_cov, Sl, Rl, *ib)
         if not lf.ok:
@@ -83,10 +87,12 @@ def certify(b):
             lf.stat['timeout'] = LIMIT
         finally:
             signal.alarm(0)
-        last = lf.stat
+        tag = f'{anchor}/{int(corner)}{int(tan)}' + ('' if rect else '/norect')
+        log.append(f"{tag}:{'timeout' if 'timeout' in lf.stat else 'fail' + str(lf.stat['fail'])}")
+        timed_out = timed_out or 'timeout' in lf.stat
         if c:
             return lf, f'{anchor}/{int(corner)}{int(tan)}' + ('' if rect else '/norect'), Sl, Rl
-    return None, f'fail {last}', Sl, Rl
+    return None, ('timeout ' if timed_out else 'fail ') + ' '.join(log), Sl, Rl
 
 
 def work(args):
