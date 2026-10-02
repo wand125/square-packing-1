@@ -60,13 +60,20 @@ def scales(b):
 def certify(b):
     Sl, Rl = scales(b)
     ib = [int(x * 5 * Sl) for x in b[:4]] + [int(x * Rl) for x in b[4:]]
-    tries = [('hi', True, True), ('lo', True, True), ('hi', False, True), ('hi', False, False)]
+    # the last flag keeps the Lebesgue rectangles; without them the bound is weaker but never negative
+    # (the rectangle term `1 - U_x - U_y` goes below 0 where the square barely meets the rectangle)
+    tries = [('hi', True, True, True), ('hi', True, True, False), ('lo', True, True, True),
+             ('hi', False, True, True), ('hi', False, False, True)]
     last = None
-    for anchor, corner, tan in tries:
+    for anchor, corner, tan, rect in tries:
         G.Leaf.ANCHOR, G.Leaf.USE_CORNER, G.Leaf.USE_TAN = anchor, corner, tan
         lf = G.Leaf(_cov, Sl, Rl, *ib)
         if not lf.ok:
             return None, 'wall', Sl, Rl
+        if not rect:
+            if not lf.crs:
+                continue
+            lf.crs = []
         signal.signal(signal.SIGALRM, _alarm)
         signal.alarm(LIMIT)
         try:
@@ -78,7 +85,7 @@ def certify(b):
             signal.alarm(0)
         last = lf.stat
         if c:
-            return lf, f'{anchor}/{int(corner)}{int(tan)}', Sl, Rl
+            return lf, f'{anchor}/{int(corner)}{int(tan)}' + ('' if rect else '/norect'), Sl, Rl
     return None, f'fail {last}', Sl, Rl
 
 
