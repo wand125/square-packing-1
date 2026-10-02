@@ -25,7 +25,7 @@ COVER = os.path.join(HERE, '..', '..', 'certificates', 'k2m3', 'L4_k02_box7.txt'
 LEAVES = os.path.join(HERE, '..', '..', 'certificates', 'k2m3', 'qx2_zm', 'runV3_6294052a_leaves.jsonl.gz')
 SG, RG, MQ = 128, 1 << 72, 35
 SIMPLE = ('EMPTY', 'SYM', 'AXIS', 'LEB')
-LIMIT = 1200          # seconds per attempt
+LIMIT = int(os.environ.get('V7_LIMIT', '1200'))   # seconds per attempt
 
 
 class Timeout(Exception):
