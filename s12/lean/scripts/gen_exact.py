@@ -10,6 +10,7 @@ what the kernel computes.
 import os, sys, time, argparse
 from fractions import Fraction as Fr
 from lemmae_mirror import *
+from kmirror import vertOkK  # the kernel's vertex test (LemmaEK.vertOkK)
 from gen_axis import read_cover
 
 
@@ -281,14 +282,14 @@ class Leaf:
                           (len(x[0][1]) * len(x[0][2]) if x[0][0] == 'alt' else 1) for x in l)
             if nc > 16 and depth < self.maxdepth and b1 - b0 >= 2:
                 pass
-            elif vertOk(*args, cert):
+            elif vertOkK(*args, cert):
                 self.stat['val'] += 1
                 return [(b1, sig, m, ('val', cert))]
             if cert[0]:
                 fcs = self.factor_certs(sig, Dp, X, Y, b0, b1, cert)
                 if fcs:
                     cert[1] = fcs
-                    if vertOk(*args, cert):
+                    if vertOkK(*args, cert):
                         self.stat['val'] += 1; self.stat['fc'] = self.stat.get('fc', 0) + 1
                         return [(b1, sig, m, ('val', cert))]
         if depth >= self.maxdepth or b1 - b0 < 2:
