@@ -1,4 +1,5 @@
 import Sqpack.LemmaEK
+import Sqpack.LebCredit
 
 /-!
 # Lemma E on a pose box: the `EXACT` leaf
@@ -569,6 +570,21 @@ structure ExLeaf where
   certs : List (List PairCert)
   ex : Bool := false
   ey : Bool := false
+  /-- a Lebesgue credit (with no rectangle terms): the target of the vertex test is `W − amt` -/
+  cred : Option LebCredit.Cred := none
+
+/-- The credit of a leaf (`0` without one). -/
+def credAmt (lf : ExLeaf) : ℕ :=
+  match lf.cred with
+  | none => 0
+  | some cr => cr.amt
+
+/-- The credit's test: no rectangle terms, `amt ≤ W`, and the strips. -/
+def credOkL (D S R W x0 x1 y0 y1 U0 U1 : ℕ) (rects : List RectE) (lf : ExLeaf) : Bool :=
+  match lf.cred with
+  | none => true
+  | some cr => lf.crs.isEmpty && Nat.ble cr.amt W &&
+      LebCredit.credOk D (D * S) x0 x1 y0 y1 U0 U1 R rects cr
 
 def hFormsSLs (D : ℕ) (e : SegE) : List SL :=
   formsSL (SL.cst e.1 D) (SL.cst e.2.2.1 D) (hTA D e.2.1) (hTB D e.2.1) (hTC D e.2.1) (hTD D e.2.1)
@@ -771,7 +787,8 @@ def exOk (D S R W x0 x1 y0 y1 U0 U1 : ℕ) (segs : List SegE) (rects : List Rect
       (hUps D q.1) (hLos D q.1) q.2) &&
     (lf.cvs.zip lf.vbx).all (fun q => boxDomOk (D * S) x0 x1 y0 y1 U0 U1 R lf.wx lf.wy
       (vUps D q.1) (vLos D q.1) q.2) &&
-    allPairsOk D W R U0 U1 side lf.chs lf.cvs lf.crs lf.hbx lf.vbx (side ++ lf.Ls) lf.certs
+    credOkL D S R W x0 x1 y0 y1 U0 U1 rects lf &&
+    allPairsOk D (W - credAmt lf) R U0 U1 side lf.chs lf.cvs lf.crs lf.hbx lf.vbx (side ++ lf.Ls) lf.certs
 
 /-- Everything in `exOk` except the pair certificates. -/
 def exHead (D S R W x0 x1 y0 y1 U0 U1 : ℕ) (segs : List SegE) (rects : List RectE) (lf : ExLeaf) :
@@ -792,12 +809,14 @@ def exHead (D S R W x0 x1 y0 y1 U0 U1 : ℕ) (segs : List SegE) (rects : List Re
     (lf.chs.zip lf.hbx).all (fun q => boxDomOk (D * S) x0 x1 y0 y1 U0 U1 R lf.wx lf.wy
       (hUps D q.1) (hLos D q.1) q.2) &&
     (lf.cvs.zip lf.vbx).all (fun q => boxDomOk (D * S) x0 x1 y0 y1 U0 U1 R lf.wx lf.wy
-      (vUps D q.1) (vLos D q.1) q.2)
+      (vUps D q.1) (vLos D q.1) q.2) &&
+    credOkL D S R W x0 x1 y0 y1 U0 U1 rects lf
 
 lemma exOk_of {D S R W x0 x1 y0 y1 U0 U1 : ℕ} {segs : List SegE} {rects : List RectE} {lf : ExLeaf}
     (h1 : exHead D S R W x0 x1 y0 y1 U0 U1 segs rects lf = true)
-    (h2 : allPairsOk D W R U0 U1 (sideE (D * S) x0 x1 y0 y1 lf.wx lf.wy lf.ex lf.ey) lf.chs lf.cvs lf.crs
-      lf.hbx lf.vbx (sideE (D * S) x0 x1 y0 y1 lf.wx lf.wy lf.ex lf.ey ++ lf.Ls) lf.certs = true) :
+    (h2 : allPairsOk D (W - credAmt lf) R U0 U1 (sideE (D * S) x0 x1 y0 y1 lf.wx lf.wy lf.ex lf.ey)
+      lf.chs lf.cvs lf.crs lf.hbx lf.vbx (sideE (D * S) x0 x1 y0 y1 lf.wx lf.wy lf.ex lf.ey ++ lf.Ls)
+      lf.certs = true) :
     exOk D S R W x0 x1 y0 y1 U0 U1 segs rects lf = true := by
   simp only [exHead] at h1
   simp only [exOk, h1, h2, Bool.and_self]
@@ -819,7 +838,7 @@ theorem CovMPo.of_exact {D S Mq R W x0 x1 y0 y1 U0 U1 : ℕ} {pts : List (ℕ ×
     CovMPo D S Mq R W pts segs rects x0 x1 y0 y1 U0 U1 := by
   simp only [exOk, Bool.and_eq_true, Nat.blt_eq, Nat.ble_eq, decide_eq_true_eq, List.all_eq_true,
     beq_iff_eq, List.contains_iff_mem] at h
-  obtain ⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨hU1, hU01⟩, hnd⟩, hcr⟩, hch⟩, hcv⟩, hcrs⟩, lhb⟩, lvb⟩, hhb⟩, hvb⟩, hpairs⟩ := h
+  obtain ⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨⟨hU1, hU01⟩, hnd⟩, hcr⟩, hch⟩, hcv⟩, hcrs⟩, lhb⟩, lvb⟩, hhb⟩, hvb⟩, hcred⟩, hpairs⟩ := h
   intro c u hx0 hx1 hy0 hy1 hu0 hu1 hbox
   have hQ : 0 < D * S := Nat.mul_pos hD hS
   have hRr : (0 : ℝ) < R := by exact_mod_cast hR
@@ -998,7 +1017,7 @@ theorem CovMPo.of_exact {D S Mq R W x0 x1 y0 y1 U0 U1 : ℕ} {pts : List (ℕ ×
     · exact boxDom_sound hQ hR (hvb q hq) (hd_vUps hD q.1) (hd_vLos hD q.1) hpos hlt hb0 hu1 p hp
   have hcl : Claims D lf.chs lf.cvs :=
     ⟨hD, fun e he => (hch e he).1.2, fun e he => (hcv e he).1.2⟩
-  have hW : (W : ℝ) ≤ fEu D lf.chs lf.cvs lf.crs u v := by
+  have hW : ((W - credAmt lf : ℕ) : ℝ) ≤ fEu D lf.chs lf.cvs lf.crs u v := by
     rcases lt_trichotomy i j with hij | hij | hij
     · obtain ⟨cert, hc'⟩ := allPairs_sound _ _ hpairs i j hij hj
       rw [hiA, hjB] at hc'
@@ -1011,10 +1030,34 @@ theorem CovMPo.of_exact {D S Mq R W x0 x1 y0 y1 U0 U1 : ℕ} {pts : List (ℕ ×
       rw [hiA, hjB] at hc'
       refine pair_sound hcl hmd hR hc' hu0 hu1 hpos hlt ?_ ht2 ht1 hv hbd
       rw [detP_swap]; exact neg_ne_zero.mpr hdetAB
-  -- 5. assemble
+  -- 5. assemble: with a credit, the rectangles are not in `fE` and the credit bounds their mass
   have h1 : fEu D lf.chs lf.cvs lf.crs u v ≤ fEu D lf.chs lf.cvs lf.crs u c := hle
   have h2 := ptMass_nonneg D pts (sq c θ 1)
-  simp only [fEu] at hW h1
+  have hcr' : fEu D lf.chs lf.cvs lf.crs u c + credAmt lf ≤
+      segMass D segs (sq c θ 1) + rectMass D rects (sq c θ 1) ∧ credAmt lf ≤ W := by
+    unfold credOkL at hcred
+    unfold credAmt
+    split at hcred
+    · simp only [Nat.cast_zero, add_zero, zero_le, and_true]
+      exact hmass
+    · rename_i cr _
+      simp only [Bool.and_eq_true, List.isEmpty_iff, Nat.ble_eq] at hcred ⊢
+      obtain ⟨⟨hnil, hamtW⟩, hok⟩ := hcred
+      refine ⟨?_, hamtW⟩
+      have hm0 := fE_le_mass (rects := []) hD hs hc c hnd
+        (fun e he => ⟨(hch e he).1.1.1, (hch e he).1.1.2, (hch e he).1.2⟩)
+        (fun e he => ⟨(hcv e he).1.1.1, (hcv e he).1.1.2, (hcv e he).1.2⟩) hcr
+        (fun r hr => by rw [hnil] at hr; exact absurd hr List.not_mem_nil)
+      have hr0 : rectMass D [] (sq c θ 1) = 0 := by simp [rectMass]
+      have hQr : ((D * S : ℕ) : ℝ) = (D : ℝ) * S := by push_cast; ring
+      have hc' := LebCredit.cred_sound (Q := D * S) hD hQ hR hok hpos hlt hb0 hu1
+        (by rw [hQr]; exact hx0) (by rw [hQr]; exact hx1) (by rw [hQr]; exact hy0) (by rw [hQr]; exact hy1)
+      simp only [fEu, hnil, List.map_nil] at hm0 ⊢
+      rw [hr0, add_zero] at hm0
+      linarith
+  obtain ⟨hcr1, hcr2⟩ := hcr'
+  rw [Nat.cast_sub hcr2] at hW
+  simp only [fEu] at hW h1 hcr1
   linarith
 
 end LemmaELeaf

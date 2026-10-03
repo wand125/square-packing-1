@@ -211,6 +211,131 @@ lemma strip_sub_sq (hG : 0 < G) (hQ : 0 < Q) (hR : 0 < R)
 
 end strip
 
+/-! ## 3.  Areas -/
+
+section area
+
+variable {G h : ℕ}
+
+lemma measurableSet_stripSet (s : Strip) : MeasurableSet (stripSet G h s) :=
+  measurableSet_Icc.prod measurableSet_Ico
+
+lemma volume_stripSet (hG : 0 < G) (s : Strip) (hs : s.1 ≤ s.2.1) :
+    volume (stripSet G h s) = ENNReal.ofReal (((s.2.1 - s.1) * h : ℕ) / ((G : ℝ) * G)) := by
+  have hGr : (0 : ℝ) < G := by exact_mod_cast hG
+  rw [stripSet, Measure.volume_eq_prod, Measure.prod_prod, Real.volume_Icc, Real.volume_Ico,
+    ← ENNReal.ofReal_mul (by rw [sub_nonneg]; exact div_le_div_of_nonneg_right (by exact_mod_cast hs) hGr.le)]
+  congr 1
+  push_cast [Nat.cast_sub hs]
+  field_simp
+  ring
+
+lemma disjoint_stripSet {s t : Strip} (hst : s.2.2 + h ≤ t.2.2) :
+    Disjoint (stripSet G h s) (stripSet G h t) := by
+  rw [Set.disjoint_left]
+  rintro p ⟨_, _, b2⟩ ⟨_, c1, _⟩
+  have : (((s.2.2 + h : ℕ) : ℝ)) / G ≤ (t.2.2 : ℝ) / G :=
+    div_le_div_of_nonneg_right (by exact_mod_cast hst) (Nat.cast_nonneg _)
+  linarith
+
+/-- Strips of a list sorted by `yb` (gaps at least `h`) have the sum of their areas. -/
+lemma volume_union_strips (hG : 0 < G) :
+    ∀ l : List Strip, l.Pairwise (fun s t => s.2.2 + h ≤ t.2.2) → (∀ s ∈ l, s.1 ≤ s.2.1) →
+      volume (⋃ s ∈ l, stripSet G h s) =
+        ENNReal.ofReal ((l.map fun s => (((s.2.1 - s.1) * h : ℕ) : ℝ) / ((G : ℝ) * G)).sum)
+  | [], _, _ => by simp
+  | a :: l, hp, hs => by
+    rw [List.pairwise_cons] at hp
+    have e : (⋃ s ∈ a :: l, stripSet G h s) = stripSet G h a ∪ ⋃ s ∈ l, stripSet G h s := by
+      ext p; simp
+    rw [e, measure_union (Set.disjoint_iUnion₂_right.mpr fun t ht => disjoint_stripSet (hp.1 t ht))
+      (MeasurableSet.biUnion (Set.to_countable _) fun t _ => measurableSet_stripSet t),
+      volume_stripSet hG a (hs a List.mem_cons_self),
+      volume_union_strips hG l hp.2 fun t ht => hs t (List.mem_cons_of_mem _ ht), List.map_cons,
+      List.sum_cons, ENNReal.ofReal_add (by positivity)
+        (List.sum_nonneg fun x hx => by
+          obtain ⟨t, _, rfl⟩ := List.mem_map.mp hx; positivity)]
+
+end area
+
+/-! ## 4.  The credit -/
+
+/-- Consecutive strips are at least `h` apart in `yb`. -/
+def sortedOk (h : ℕ) : List Strip → Bool
+  | [] => true
+  | [_] => true
+  | s :: t :: l => Nat.ble (s.2.2 + h) t.2.2 && sortedOk h (t :: l)
+
+lemma pairwise_of_sortedOk (h : ℕ) :
+    ∀ l : List Strip, sortedOk h l = true → l.Pairwise fun s t => s.2.2 + h ≤ t.2.2
+  | [], _ => List.Pairwise.nil
+  | [_], _ => List.pairwise_singleton _ _
+  | s :: t :: l, hs => by
+    simp only [sortedOk, Bool.and_eq_true, Nat.ble_eq] at hs
+    have ih := pairwise_of_sortedOk h (t :: l) hs.2
+    rw [List.pairwise_cons] at ih ⊢
+    refine ⟨fun w hw => ?_, List.pairwise_cons.mpr ih⟩
+    rcases List.mem_cons.mp hw with rfl | hw
+    · exact hs.1
+    · have := ih.1 w hw; omega
+
+/-- **The test of a credit**: the rectangle is in the cover, the strips are sorted with gaps `h`, each
+is inside the rectangle and every admissible square, and `amt ≤ w_e · Σ area`. -/
+def credOk (D Q x0 x1 y0 y1 U0 U1 R : ℕ) (rects : List RectE) (cr : Cred) : Bool :=
+  rects.contains cr.e && Nat.blt 0 cr.G &&
+    sortedOk cr.h cr.strips &&
+    cr.strips.all (stripOk D cr.G Q x0 x1 y0 y1 U0 U1 R cr.h cr.e) &&
+    Nat.ble (cr.amt * (cr.G * cr.G)) (cr.e.2.2.2.2 * (cr.strips.map fun s => (s.2.1 - s.1) * cr.h).sum)
+
+lemma sum_map_div (G : ℝ) : ∀ (l : List Strip) (f : Strip → ℕ),
+    (l.map fun s => (f s : ℝ) / G).sum = (((l.map f).sum : ℕ) : ℝ) / G
+  | [], _ => by simp
+  | a :: l, f => by
+    simp only [List.map_cons, List.sum_cons, Nat.cast_add, sum_map_div G l f, add_div]
+
+/-- **The credit is at most the rectangle's mass** in every admissible square. -/
+theorem cred_sound {D Q x0 x1 y0 y1 U0 U1 R : ℕ} {rects : List RectE} {cr : Cred} (hD : 0 < D)
+    (hQ : 0 < Q) (hR : 0 < R) (h : credOk D Q x0 x1 y0 y1 U0 U1 R rects cr = true) {u : ℝ}
+    (hu0 : 0 < u) (hu1 : u < 1) (hb0 : (U0 : ℝ) / R ≤ u) (hb1 : u ≤ (U1 : ℝ) / R) {c : ℝ × ℝ}
+    (hx0 : (x0 : ℝ) / Q ≤ c.1) (hx1 : c.1 ≤ (x1 : ℝ) / Q) (hy0 : (y0 : ℝ) / Q ≤ c.2)
+    (hy1 : c.2 ≤ (y1 : ℝ) / Q) :
+    (cr.amt : ℝ) ≤ ZMTreeM.rectMass D rects (sq c (2 * Real.arctan u) 1) := by
+  simp only [credOk, Bool.and_eq_true, Nat.blt_eq, Nat.ble_eq, List.all_eq_true,
+    List.contains_iff_mem] at h
+  obtain ⟨⟨⟨⟨he, hG⟩, hch⟩, hst⟩, hamt⟩ := h
+  set Qs := sq c (2 * Real.arctan u) 1
+  have hpw := pairwise_of_sortedOk cr.h cr.strips hch
+  have hle : ∀ s ∈ cr.strips, s.1 ≤ s.2.1 := fun s hs => by
+    have := hst s hs; simp only [stripOk, Bool.and_eq_true, Nat.ble_eq] at this; exact this.1.1.1.1.1.1.1.1
+  -- the strips lie in the square and in the rectangle
+  have hsub : (⋃ s ∈ cr.strips, stripSet cr.G cr.h s) ⊆ Qs ∩ rectSet D cr.e :=
+    Set.iUnion₂_subset fun s hs => Set.subset_inter
+      (strip_sub_sq hG hQ hR (hst s hs) hu0 hu1 hb0 hb1 hx0 hx1 hy0 hy1)
+      (strip_sub_rect hD hG (hst s hs))
+  have hfin : volume (Qs ∩ rectSet D cr.e) ≠ ⊤ := by
+    refine ne_top_of_le_ne_top ?_ (measure_mono Set.inter_subset_right)
+    rw [rectSet, Measure.volume_eq_prod, Measure.prod_prod, Real.volume_Icc, Real.volume_Icc]
+    exact ENNReal.mul_ne_top ENNReal.ofReal_ne_top ENNReal.ofReal_ne_top
+  have hvol : ENNReal.ofReal ((cr.strips.map fun s => (((s.2.1 - s.1) * cr.h : ℕ) : ℝ) /
+      ((cr.G : ℝ) * cr.G)).sum) ≤ volume (Qs ∩ rectSet D cr.e) := by
+    rw [← volume_union_strips hG cr.strips hpw hle]; exact measure_mono hsub
+  rw [ENNReal.ofReal_le_iff_le_toReal hfin, sum_map_div] at hvol
+  -- the credit
+  have hGr : (0 : ℝ) < cr.G := by exact_mod_cast hG
+  have hamt' : (cr.amt : ℝ) ≤ cr.e.2.2.2.2 *
+      ((((cr.strips.map fun s => (s.2.1 - s.1) * cr.h).sum : ℕ) : ℝ) / ((cr.G : ℝ) * cr.G)) := by
+    rw [mul_div_assoc', le_div_iff₀ (by positivity)]
+    exact_mod_cast hamt
+  have hone : (cr.e.2.2.2.2 : ℝ) * (volume (Qs ∩ rectSet D cr.e)).toReal ≤
+      ZMTreeM.rectMass D rects Qs := by
+    unfold ZMTreeM.rectMass
+    exact Finset.single_le_sum (f := fun e : RectE => (e.2.2.2.2 : ℝ) * (volume (Qs ∩ rectSet D e)).toReal)
+      (fun _ _ => mul_nonneg (Nat.cast_nonneg _) ENNReal.toReal_nonneg) (List.mem_toFinset.mpr he)
+  calc (cr.amt : ℝ) ≤ _ := hamt'
+    _ ≤ (cr.e.2.2.2.2 : ℝ) * (volume (Qs ∩ rectSet D cr.e)).toReal :=
+        mul_le_mul_of_nonneg_left hvol (Nat.cast_nonneg _)
+    _ ≤ _ := hone
+
 end LebCredit
 
 end SquarePacking
