@@ -20,6 +20,7 @@ from tree_rebuild import load, build, count  # noqa: E402
 from gen_tree import Glue  # noqa: E402
 from gen_axis import read_cover  # noqa: E402
 import gen_exact as G  # noqa: E402
+from gen_credit import credit  # noqa: E402
 
 COVER = os.path.join(HERE, '..', '..', 'certificates', 'k2m3', 'L4_k02_box7.txt')
 LEAVES = os.path.join(HERE, '..', '..', 'certificates', 'k2m3', 'qx2_zm', 'runV3_6294052a_leaves.jsonl.gz')
@@ -57,26 +58,46 @@ def scales(b):
     return Sl, max(1 << 16, du << 10)
 
 
+CG, CH = 2048, F(1, 256)     # the credit's denominator and strip height (a multiple of 1/CG)
+
+
+def set_credit(lf, b, ib, Rl):
+    """`lf.cred` for the Lebesgue rectangle of the cover, and the reduced vertex target"""
+    e = _cov[5][0]
+    D = _cov[1]
+    rect = tuple(F(e[i], D) for i in range(4))
+    strips, area = credit(tuple(b[:4]), ib[4], ib[5], Rl, rect, h=CH)
+    hh = int(CH * CG)
+    st = [(int(xa * CG), int(xb * CG), int(yb * CG)) for xa, xb, yb in strips]
+    assert all(F(t[0], CG) == xa and F(t[1], CG) == xb and F(t[2], CG) == yb for t, (xa, xb, yb) in zip(st, strips))
+    amt = e[4] * sum((t[1] - t[0]) * hh for t in st) // (CG * CG)
+    lf.cred = (tuple(e), CG, hh, amt, st)
+    lf.W = lf.W0 - amt
+
+
 def certify(b):
     Sl, Rl = scales(b)
     ib = [int(x * 5 * Sl) for x in b[:4]] + [int(x * Rl) for x in b[4:]]
     # the last flag keeps the Lebesgue rectangles; without them the bound is weaker but never negative
     # (the rectangle term `1 - U_x - U_y` goes below 0 where the square barely meets the rectangle)
-    tries = [('hi', True, True, True), ('hi', True, True, False), ('lo', True, True, True),
-             ('hi', False, True, True), ('hi', False, False, True)]
+    # 'credit': no rectangle terms, the rectangle's mass bounded by strips inside every square
+    tries = [('hi', True, True, True), ('hi', True, True, False), ('hi', True, True, 'credit'),
+             ('lo', True, True, True), ('hi', False, True, True), ('hi', False, False, True)]
     log = []
     timed_out = False
     for anchor, corner, tan, rect in tries:
-        if timed_out and rect:
+        if timed_out and rect is True:
             # the other modes only help where a check fails; a slow leaf needs a longer limit (V7_LIMIT)
             continue
         G.Leaf.ANCHOR, G.Leaf.USE_CORNER, G.Leaf.USE_TAN = anchor, corner, tan
         lf = G.Leaf(_cov, Sl, Rl, *ib)
         if not lf.ok:
             return None, 'wall', Sl, Rl
-        if not rect:
+        if rect is not True:
             if not lf.crs:
                 continue
+            if rect == 'credit':
+                set_credit(lf, b, ib, Rl)
             lf.crs = []
         signal.signal(signal.SIGALRM, _alarm)
         signal.alarm(LIMIT)
@@ -87,11 +108,11 @@ def certify(b):
             lf.stat['timeout'] = LIMIT
         finally:
             signal.alarm(0)
-        tag = f'{anchor}/{int(corner)}{int(tan)}' + ('' if rect else '/norect')
+        tag = f'{anchor}/{int(corner)}{int(tan)}' + {True: '', False: '/norect', 'credit': '/credit'}[rect]
         log.append(f"{tag}:{'timeout' if 'timeout' in lf.stat else 'fail' + str(lf.stat['fail'])}")
         timed_out = timed_out or 'timeout' in lf.stat
         if c:
-            return lf, f'{anchor}/{int(corner)}{int(tan)}' + ('' if rect else '/norect'), Sl, Rl
+            return lf, tag, Sl, Rl
     return None, ('timeout ' if timed_out else 'fail ') + ' '.join(log), Sl, Rl
 
 
@@ -120,7 +141,7 @@ def work(args):
             continue
         name = f"r{idx:05d}l{n}"
         g.leaf_names[b] = (f"{name}_ok", Sl, Rl)
-        cert[b] = dict(name=name, S=Sl, R=Rl, D=lf.D, W=lf.W, Q=lf.Q, box=lf.box, wx=lf.wx, wy=lf.wy,
+        cert[b] = dict(name=name, S=Sl, R=Rl, D=lf.D, W=lf.W, W0=lf.W0, cred=lf.cred, Q=lf.Q, box=lf.box, wx=lf.wx, wy=lf.wy,
                        ex=lf.ex, ey=lf.ey, chs=lf.chs, cvs=lf.cvs, crs=lf.crs, Ls=lf.Ls, side=lf.side,
                        hbx=lf.hbx, vbx=lf.vbx, certs=lf.certs)
     status = dict(root=idx, kinds=count(tree), fails=fails, how=how, sec=round(time.time() - t0, 1))

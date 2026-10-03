@@ -44,6 +44,8 @@ class Leaf:
     def __init__(self, cover, S, R, x0, x1, y0, y1, U0, U1, maxdepth=8):
         side_, D, W, pts, segs, rects = cover
         self.D, self.W, self.S, self.R = D, W, S, R
+        self.W0 = W          # the target of the leaf; W = W0 - credit for the vertex test
+        self.cred = None
         self.Q = Q = D * S
         self.box = (x0, x1, y0, y1, U0, U1)
         self.maxdepth = maxdepth
@@ -430,7 +432,16 @@ def to_lean(lf, name):
             f"  hbx := [{', '.join(lbx(b) for b in lf.hbx)}]\n"
             f"  vbx := [{', '.join(lbx(b) for b in lf.vbx)}]\n"
             f"  certs := [\n    {rows}]\n"
-            + ("  ex := true\n" if lf.ex else "") + ("  ey := true\n" if lf.ey else ""))
+            + ("  ex := true\n" if lf.ex else "") + ("  ey := true\n" if lf.ey else "")
+            + lcred(getattr(lf, 'cred', None)))
+
+
+def lcred(cr):
+    """the `cred` field: `(rect, G, h, amt, strips)`"""
+    if cr is None:
+        return ""
+    e, G, h, amt, strips = cr
+    return (f"  cred := some ⟨{ltup(e)}, {G}, {h}, {amt},\n    [{', '.join(ltup(t) for t in strips)}]⟩\n")
 
 
 
@@ -438,9 +449,10 @@ def to_lean_split(lf, name, segs="tsegs", rects="trects", rows_only=False):
     """The leaf and its `exOk` theorem, the pair certificates checked one `decide` per pair
     (or per row) and glued along `List.drop`."""
     x0, x1, y0, y1, U0, U1 = lf.box
-    D, S, R, W, Q = lf.D, lf.S, lf.R, lf.W, lf.Q
+    D, S, R, Q = lf.D, lf.S, lf.R, lf.Q
+    W = getattr(lf, 'W0', lf.W)
     side = f"(sideE {Q} {x0} {x1} {y0} {y1} {name}.wx {name}.wy {name}.ex {name}.ey)"
-    ctx = f"{D} {W} {R} {U0} {U1} {side} {name}.chs {name}.cvs {name}.crs {name}.hbx {name}.vbx"
+    ctx = f"{D} ({W} - credAmt {name}) {R} {U0} {U1} {side} {name}.chs {name}.cvs {name}.crs {name}.hbx {name}.vbx"
     d0 = "(([0], [0], [0]) : PL)"
     q0 = "((([0], [0], [0]) : PL), PairCert.par)"
     n = len(lf.side) + len(lf.Ls)

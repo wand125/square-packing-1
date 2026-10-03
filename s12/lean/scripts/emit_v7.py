@@ -29,7 +29,8 @@ def to_lean_enc(lf, name):
             f"  hbx := [{', '.join(G.lbx(b) for b in lf.hbx)}]\n"
             f"  vbx := [{', '.join(G.lbx(b) for b in lf.vbx)}]\n"
             f"  certs := [\n    {rows}]\n"
-            + ("  ex := true\n" if lf.ex else "") + ("  ey := true\n" if lf.ey else ""))
+            + ("  ex := true\n" if lf.ex else "") + ("  ey := true\n" if lf.ey else "")
+            + G.lcred(getattr(lf, 'cred', None)))
 
 
 G.to_lean = to_lean_enc
