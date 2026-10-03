@@ -75,13 +75,34 @@ def set_credit(lf, b, ib, Rl):
     lf.W = lf.W0 - amt
 
 
-def certify(b):
+SPLIT_DEPTH = int(os.environ.get('V7_SPLIT', '3'))   # levels of splitting a failing leaf
+LIMIT0 = int(os.environ.get('V7_LIMIT0', '1800'))    # seconds per attempt before splitting
+
+
+def split_box(b, D):
+    """halve the box along its largest side (u counted twice), at a point the glue can name
+    (centres on the grid 1/(D SG)); None if no side can be halved"""
+    dx, dy, du = b[1] - b[0], b[3] - b[2], 2 * (b[5] - b[4])
+    for ax, i in sorted((('X', 0), ('Y', 2), ('U', 4)), key=lambda a: -(dx, dy, du)[a[1] // 2]):
+        mid = (b[i] + b[i + 1]) / 2
+        if ax != 'U' and (mid * D * SG).denominator != 1:
+            continue
+        if ax == 'U' and (mid * RG).denominator != 1:
+            continue
+        bl = list(b); bl[i + 1] = mid
+        bh = list(b); bh[i] = mid
+        return ax, mid, tuple(bl), tuple(bh)
+    return None
+
+
+def certify(b, limit=None):
     Sl, Rl = scales(b)
     ib = [int(x * 5 * Sl) for x in b[:4]] + [int(x * Rl) for x in b[4:]]
     # the last flag keeps the Lebesgue rectangles; without them the bound is weaker but never negative
     # (the rectangle term `1 - U_x - U_y` goes below 0 where the square barely meets the rectangle)
     # 'credit': no rectangle terms, the rectangle's mass bounded by strips inside every square
-    tries = [('hi', True, True, True), ('hi', True, True, False), ('hi', True, True, 'credit'),
+    # the credit first: when it applies it is usually the fastest
+    tries = [('hi', True, True, 'credit'), ('hi', True, True, True), ('hi', True, True, False),
              ('lo', True, True, True), ('hi', False, True, True), ('hi', False, False, True)]
     log = []
     timed_out = False
@@ -100,12 +121,12 @@ def certify(b):
                 set_credit(lf, b, ib, Rl)
             lf.crs = []
         signal.signal(signal.SIGALRM, _alarm)
-        signal.alarm(LIMIT)
+        signal.alarm(limit or LIMIT)
         try:
             c = lf.run()
         except Timeout:
             c = None
-            lf.stat['timeout'] = LIMIT
+            lf.stat['timeout'] = limit or LIMIT
         finally:
             signal.alarm(0)
         tag = f'{anchor}/{int(corner)}{int(tan)}' + {True: '', False: '/norect', 'credit': '/credit'}[rect]
@@ -127,23 +148,38 @@ def work(args):
     g = Glue(D, SG, RG, W, MQ)
     body, fails, how = [], [], []
     cert = {}
-    for n, (_, b, k) in enumerate(leaves_of(tree)):
-        if b[4] == b[5]:
-            continue
-        if k == 'LEB' and g.lebOk(b, rects[0]):
-            continue
-        if k in SIMPLE and k != 'LEB':
-            continue
-        lf, why, Sl, Rl = certify(b)
+    counter = [0]
+
+    def cert_leaf(b, k, depth):
+        """the leaf `b` certified, or split in two (up to SPLIT_DEPTH levels) where it fails or is slow"""
+        n = counter[0]; counter[0] += 1
+        lf, why, Sl, Rl = certify(b, LIMIT0 if depth < SPLIT_DEPTH else None)
         how.append(why)
         if lf is None:
-            fails.append([n, k, [str(x) for x in b], why])
-            continue
+            sp = split_box(b, D) if depth < SPLIT_DEPTH else None
+            if sp is None:
+                fails.append([n, k, [str(x) for x in b], why])
+                return ('L', b, k)
+            ax, mid, bl, bh = sp
+            return (ax, mid, cert_leaf(bl, k, depth + 1), cert_leaf(bh, k, depth + 1))
         name = f"r{idx:05d}l{n}"
         g.leaf_names[b] = (f"{name}_ok", Sl, Rl)
-        cert[b] = dict(name=name, S=Sl, R=Rl, D=lf.D, W=lf.W, W0=lf.W0, cred=lf.cred, Q=lf.Q, box=lf.box, wx=lf.wx, wy=lf.wy,
-                       ex=lf.ex, ey=lf.ey, chs=lf.chs, cvs=lf.cvs, crs=lf.crs, Ls=lf.Ls, side=lf.side,
-                       hbx=lf.hbx, vbx=lf.vbx, certs=lf.certs)
+        cert[b] = dict(name=name, S=Sl, R=Rl, D=lf.D, W=lf.W, W0=lf.W0, cred=lf.cred, Q=lf.Q, box=lf.box,
+                       wx=lf.wx, wy=lf.wy, ex=lf.ex, ey=lf.ey, chs=lf.chs, cvs=lf.cvs, crs=lf.crs, Ls=lf.Ls,
+                       side=lf.side, hbx=lf.hbx, vbx=lf.vbx, certs=lf.certs)
+        return ('L', b, k)
+
+    def walk(t):
+        if t[0] == 'L':
+            _, b, k = t
+            if b[4] == b[5] or (k == 'LEB' and g.lebOk(b, rects[0])) or (k in SIMPLE and k != 'LEB'):
+                return t
+            return cert_leaf(b, k, 0)
+        if t[0] == 'C':
+            return ('C', t[1], walk(t[2]))
+        return (t[0], t[1], walk(t[2]), walk(t[3]))
+
+    tree = walk(tree)
     status = dict(root=idx, kinds=count(tree), fails=fails, how=how, sec=round(time.time() - t0, 1))
     if not fails:
         path = os.path.join(outdir, f"R{idx:05d}.pkl")
