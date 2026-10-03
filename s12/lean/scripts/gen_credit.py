@@ -35,15 +35,19 @@ def corner_ok(p, box, U0, U1, R):
 
 def _interval(y, box, U0, U1, R, xlo, xhi, hx):
     """the grid points x = xlo + k hx in [xlo, xhi] with (x, y) in the core: an interval (the core is
-    convex), found from the centre outwards; None if the centre column is out"""
+    convex), found from a passing column outwards; None if no column passes"""
     n = int((xhi - xlo) / hx)
     if n < 0:
         return None
+    ok = lambda k: corner_ok((xlo + k * hx, y), box, U0, U1, R)
+    # a passing column: the box centre first, then a scan (the passing set is an interval)
     xm = (box[0] + box[1]) / 2
     km = max(0, min(n, int((xm - xlo) / hx)))
-    ok = lambda k: corner_ok((xlo + k * hx, y), box, U0, U1, R)
     if not ok(km):
-        return None
+        step = max(1, n // 256)
+        km = next((k for k in range(0, n + 1, step) if ok(k)), None)
+        if km is None:
+            return None
     lo, hi = 0, km            # smallest passing k in [lo, km]
     while lo < hi:
         mid = (lo + hi) // 2
@@ -58,7 +62,7 @@ def _interval(y, box, U0, U1, R, xlo, xhi, hx):
     return xlo + a * hx, xlo + lo * hx
 
 
-def credit(box, U0, U1, R, rect, h=Fr(1, 128), hx=None):
+def credit(box, U0, U1, R, rect, h=Fr(1, 256), hx=None):
     """box: centre box (x0, x1, y0, y1) as Fractions; rect: (X0, Y0, X1, Y1) as Fractions"""
     hx = hx or h / 8
     reach = Fr(7072, 10000)
