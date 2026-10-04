@@ -61,6 +61,55 @@ def emit(path, outdir):
     return idx, len(txt)
 
 
+HDR = ["import Sqpack.V7.Data", "import Sqpack.LemmaEDec"]
+OPEN = ["namespace SquarePacking.LemmaELeaf", "open ZMTreeM LemmaEVert LemmaEPoly ZMTree",
+        "set_option maxRecDepth 100000", "set_option maxHeartbeats 0"]
+
+
+def _write(path, txt):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path + ".tmp", 'w') as f:
+        f.write(txt)
+    os.replace(path + ".tmp", path)
+
+
+def emit_split(path, outdir, chunk):
+    """one module per leaf (definitions and head), one per group of rows (at most `chunk` pair
+    theorems), and the root module (the leaves' `exOk` and the root theorem)"""
+    global _rects
+    if _rects is None:
+        _rects = sorted_cover()[5]
+    d = pickle.load(open(path, 'rb'))
+    idx, root, tree = d['idx'], d['root'], d['tree']
+    g = Glue(5, SG, RG, 10 ** 12, MQ)
+    rdir = f"R{idx:05d}"
+    imports, oks, total = [], [], 0
+    for b, c in d['leaves'].items():
+        lf = SimpleNamespace(**c)
+        name = c['name']
+        defs, rows, ok = G.to_lean_parts(lf, name)
+        base = f"Sqpack.V7.{rdir}.{name}"
+        txt = "\n".join(HDR + OPEN + [defs, "end SquarePacking.LemmaELeaf"]) + "\n"
+        _write(os.path.join(outdir, rdir, f"{name}.lean"), txt); total += len(txt)
+        groups, cur, size = [], [], 0
+        for r in rows:
+            k = r.count("theorem ")
+            if cur and size + k > chunk:
+                groups.append(cur); cur, size = [], 0
+            cur.append(r); size += k
+        if cur: groups.append(cur)
+        for gi, grp in enumerate(groups):
+            txt = "\n".join([f"import {base}"] + OPEN + grp + ["end SquarePacking.LemmaELeaf"]) + "\n"
+            _write(os.path.join(outdir, rdir, f"{name}_g{gi}.lean"), txt); total += len(txt)
+            imports.append(f"import {base}_g{gi}")
+        oks.append(ok)
+        g.leaf_names[b] = (f"{name}_ok", c['S'], c['R'])
+    txt = "\n".join(HDR + imports + OPEN + oks + [g.root_thm(f"root_{idx:05d}", root, tree, _rects),
+                                                    "end SquarePacking.LemmaELeaf"]) + "\n"
+    _write(os.path.join(outdir, f"{rdir}.lean"), txt); total += len(txt)
+    return idx, total
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--cert', default=os.path.join(HERE, '..', 'v7cert'))
@@ -68,12 +117,14 @@ def main():
     ap.add_argument('--lo', type=int, default=0)
     ap.add_argument('--hi', type=int, default=10 ** 9)
     ap.add_argument('--nproc', type=int, default=1)
+    ap.add_argument('--chunk', type=int, default=0, help='split modules: pair theorems per row group (0: one module per root)')
     a = ap.parse_args()
     paths = sorted(p for p in glob.glob(os.path.join(a.cert, 'R*.pkl'))
                    if a.lo <= int(os.path.basename(p)[1:6]) < a.hi)
     with Pool(a.nproc) as pool:
         tot = 0
-        for idx, n in pool.starmap(emit, [(p, a.out) for p in paths]):
+        jobs = [(p, a.out, a.chunk) for p in paths] if a.chunk else [(p, a.out) for p in paths]
+        for idx, n in pool.starmap(emit_split if a.chunk else emit, jobs):
             tot += n
     print(len(paths), "modules", tot, "bytes")
 

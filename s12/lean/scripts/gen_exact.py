@@ -446,9 +446,9 @@ def lcred(cr):
 
 
 
-def to_lean_split(lf, name, segs="tsegs", rects="trects", rows_only=False):
-    """The leaf and its `exOk` theorem, the pair certificates checked one `decide` per pair
-    (or per row) and glued along `List.drop`."""
+def to_lean_parts(lf, name, segs="tsegs", rects="trects"):
+    """The leaf in parts: the definitions with the head theorem, one block per row (its pair
+    theorems and the row theorem), and the `exOk` theorem gluing the rows."""
     x0, x1, y0, y1, U0, U1 = lf.box
     D, S, R, Q = lf.D, lf.S, lf.R, lf.Q
     W = getattr(lf, 'W0', lf.W)
@@ -457,28 +457,33 @@ def to_lean_split(lf, name, segs="tsegs", rects="trects", rows_only=False):
     d0 = "(([0], [0], [0]) : PL)"
     q0 = "((([0], [0], [0]) : PL), PairCert.par)"
     n = len(lf.side) + len(lf.Ls)
-    out = [to_lean(lf, name)]
-    out.append(f"def {name}_L : List PL := {side} ++ {name}.Ls\n")
-    out.append(f"def {name}_Z (i : ℕ) : List (PL × PairCert) := ({name}_L.drop (i + 1)).zip ({name}.certs.getD i [])\n")
-    out.append(f"def {name}_p (i : ℕ) : PL × PairCert → Bool := fun q => pairOk {ctx} ({name}_L.getD i {d0}) q.1 q.2\n")
     dk = "by decide +kernel"
+    args = f"{D} {S} {R} {W} {x0} {x1} {y0} {y1} {U0} {U1} {segs} {rects} {name}"
+    defs = [to_lean(lf, name),
+            f"def {name}_L : List PL := {side} ++ {name}.Ls\n",
+            f"def {name}_Z (i : ℕ) : List (PL × PairCert) := ({name}_L.drop (i + 1)).zip ({name}.certs.getD i [])\n",
+            f"def {name}_p (i : ℕ) : PL × PairCert → Bool := fun q => pairOk {ctx} ({name}_L.getD i {d0}) q.1 q.2\n",
+            f"theorem {name}_head : exHead {args} = true := {dk}\n"]
+    rows = []
     for i in range(n):
+        out = []
         m = len(lf.certs[i]) if i < len(lf.certs) else 0
-        if rows_only:
-            body = f"rowOk_of ({dk}) ({dk})"
-        else:
-            for j in range(m):
-                out.append(f"theorem {name}_{i}_{j} : {name}_p {i} (({name}_Z {i}).getD {j} {q0}) = true := {dk}\n")
-            t = f"all_drop_end ({name}_p {i}) ({name}_Z {i}) {m} ({dk})"
-            for j in reversed(range(m)):
-                t = f"all_drop_step ({name}_p {i}) ({name}_Z {i}) {j} {q0} ({dk}) {name}_{i}_{j}\n    ({t})"
-            body = f"rowOk_of ({dk})\n    ({t})"
+        for j in range(m):
+            out.append(f"theorem {name}_{i}_{j} : {name}_p {i} (({name}_Z {i}).getD {j} {q0}) = true := {dk}\n")
+        t = f"all_drop_end ({name}_p {i}) ({name}_Z {i}) {m} ({dk})"
+        for j in reversed(range(m)):
+            t = f"all_drop_step ({name}_p {i}) ({name}_Z {i}) {j} {q0} ({dk}) {name}_{i}_{j}\n    ({t})"
         out.append(f"theorem {name}_r{i} : rowOk {ctx} ({name}_L.getD {i} {d0}) ({name}_L.drop {i + 1}) "
-                   f"({name}.certs.getD {i} []) = true :=\n  {body}\n")
+                   f"({name}.certs.getD {i} []) = true :=\n  rowOk_of ({dk})\n    ({t})\n")
+        rows.append("\n".join(out))
     t = f"allPairsOk_drop_end {name}_L ({name}.certs.drop {n}) {n} ({dk})"
     for i in reversed(range(n)):
         t = f"allPairsOk_drop_step {name}_L {name}.certs {i} {d0} ({dk}) ({dk}) {name}_r{i}\n    ({t})"
-    args = f"{D} {S} {R} {W} {x0} {x1} {y0} {y1} {U0} {U1} {segs} {rects} {name}"
-    out.append(f"theorem {name}_head : exHead {args} = true := {dk}\n")
-    out.append(f"theorem {name}_ok : exOk {args} = true :=\n  exOk_of {name}_head\n    ({t})\n")
-    return "\n".join(out)
+    ok = f"theorem {name}_ok : exOk {args} = true :=\n  exOk_of {name}_head\n    ({t})\n"
+    return "\n".join(defs), rows, ok
+
+
+def to_lean_split(lf, name, segs="tsegs", rects="trects", rows_only=False):
+    """The leaf and its `exOk` theorem in one block (see `to_lean_parts`)."""
+    defs, rows, ok = to_lean_parts(lf, name, segs, rects)
+    return "\n".join([defs] + rows + [ok])
