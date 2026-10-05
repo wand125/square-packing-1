@@ -5,6 +5,7 @@ A polynomial `p` of formal degree `n` is carried as `(v, n, b)` with `v = Bⁿ p
 its image, its exponents `(e, i, j, k, d)` and a thunk giving the list form (`lemmae_mirror`), which
 only the common-factor certificates need.
 """
+from itertools import product
 from math import gcd
 
 import lemmae_mirror as M
@@ -328,9 +329,9 @@ def vertOkK(Dn, W, sigma, D, X, Y, b0, b1, R, chs, cvs, crs, hbx, vbx, cert, K=K
         # shared suffix, the same term for every combination
         multi = [l for l in alts if len(l) != 1]
         base = sumK(c, [l[0] for l in alts if len(l) == 1] + sps + [kconst(-W, 1)])
-        for comb in cprod(multi):
+        for comb in product(*multi):     # = cprod(multi), lazily
             T = base
-            for r in reversed(comb):
+            for r in reversed(comb):  # noqa: B007
                 T = kadd(c, r, T)
             if not totOkK(c, sigma, b0, b1, R, splits, pat, fcs, T):
                 return False
