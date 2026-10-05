@@ -11,6 +11,8 @@ import os, sys, time, argparse
 from fractions import Fraction as Fr
 from lemmae_mirror import *
 from kmirror import vertOkK  # the kernel's vertex test (LemmaEK.vertOkK)
+import itertools
+FC_MAXCOMB = 512   # combinations searched for common-factor certificates
 from gen_axis import read_cover
 
 
@@ -237,7 +239,12 @@ class Leaf:
                     alts.append([t for ax in xs if tagOk(pat, capTag(ax)) for ay in ys if tagOk(pat, capTag(ay))
                                  for t in lebRFs(Dp, X, Y, self.D, r, ax, ay)])
                 sps = [sproc(Dp, X, Y, s_, b) for s_, b in zip(splits, pat)]
-                for comb in cprod(alts):
+                nc = 1
+                for l in alts: nc *= len(l)
+                if nc > FC_MAXCOMB:      # too many to search (memory): the sub-bin is split instead
+                    continue
+                for comb in itertools.product(*alts):
+                    comb = list(comb)
                     T = sumRF(Dp, comb + sps + [rf_const(-self.W, 1)])
                     if ckRF(sig, T, b0, b1, self.R): continue
                     G = sympy.gcd(topoly(snum(sig, T)), Pq)
