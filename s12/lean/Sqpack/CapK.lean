@@ -1,5 +1,6 @@
 import Sqpack.SquareArea
 import Sqpack.CovMP
+import Sqpack.D4
 
 /-!
 # Lemma K (caps of the Lebesgue rectangle paid by the segments on its sides)
@@ -242,6 +243,131 @@ theorem side_x (hs : 0 < Real.sin θ) (hc : 0 < Real.cos θ) {a : ℝ} (ha : a �
       _ ≤ _ := hsum
 
 end side
+
+section swap
+
+variable {c : ℝ × ℝ} {θ : ℝ}
+
+/-- `x ↔ y` maps `Q(c, θ)` onto `Q(swap c, π/2 − θ)`. -/
+lemma mem_sq_swap (p : ℝ × ℝ) :
+    swapXY p ∈ sq (swapXY c) (Real.pi / 2 - θ) 1 ↔ p ∈ sq c θ 1 := by
+  rw [show Real.pi / 2 - θ = -θ + Real.pi / 2 by ring, sq_add_pi_div_two, mem_sq_swapXY]
+
+lemma swap_preimage_sq :
+    swapXY ⁻¹' (sq (swapXY c) (Real.pi / 2 - θ) 1) = sq c θ 1 := by
+  ext p; exact mem_sq_swap p
+
+lemma volume_cap_y (a : ℝ) :
+    volume (sq c θ 1 ∩ {p | p.2 < a}) =
+      volume (sq (swapXY c) (Real.pi / 2 - θ) 1 ∩ {p | p.1 < a}) := by
+  have hmp : MeasurePreserving (swapXY : ℝ × ℝ → ℝ × ℝ) volume volume := by
+    have : (swapXY : ℝ × ℝ → ℝ × ℝ) = Prod.swap := by funext p; rfl
+    rw [this, Measure.volume_eq_prod]; exact Measure.measurePreserving_swap
+  have hmeas : MeasurableSet (sq (swapXY c) (Real.pi / 2 - θ) 1 ∩ {p : ℝ × ℝ | p.1 < a}) :=
+    (isClosed_sq' _ _ 1).measurableSet.inter (measurableSet_lt measurable_fst measurable_const)
+  rw [← hmp.measure_preimage hmeas.nullMeasurableSet]
+  congr 1
+  ext p
+  simp only [Set.mem_preimage, Set.mem_inter_iff, Set.mem_setOf_eq, mem_sq_swap]
+  rfl
+
+lemma segFrac_swap (a b : ℝ × ℝ) :
+    segFrac (swapXY a) (swapXY b) (sq (swapXY c) (Real.pi / 2 - θ) 1) = segFrac a b (sq c θ 1) := by
+  unfold segFrac
+  congr 2
+  ext t
+  simp only [Set.mem_preimage, Set.mem_inter_iff]
+  rw [← mem_sq_swap (c := c) (θ := θ)]
+  rfl
+
+/-- **The other side**: the cap of `Q` below `y = a`, paid by horizontal pieces on the line
+(the hypotheses read on the swapped square). -/
+theorem side_y (hs : 0 < Real.sin θ) (hc : 0 < Real.cos θ) {a : ℝ} (ha : a ≤ c.2) {we ρ dbar : ℝ}
+    (hwe : 0 ≤ we) (hρ : 0 ≤ ρ)
+    (hd : a - xmin (swapXY c) (Real.pi / 2 - θ) ≤ dbar) (hwd : we * dbar ≤ ρ)
+    (pcs : List (ℝ × ℝ × ℝ)) {P : ℝ} (hch : ChainFrom P (pcs.map fun p => (p.1, p.2.1)))
+    (hpos : ∀ p ∈ pcs, p.1 < p.2.1) (hden : ∀ p ∈ pcs, ρ * (p.2.1 - p.1) ≤ p.2.2)
+    (hP : lo (swapXY c) (Real.pi / 2 - θ) a < hi (swapXY c) (Real.pi / 2 - θ) a →
+      P ≤ lo (swapXY c) (Real.pi / 2 - θ) a ∧
+        hi (swapXY c) (Real.pi / 2 - θ) a ≤ endOf P (pcs.map fun p => (p.1, p.2.1))) :
+    we * (volume (sq c θ 1 ∩ {p | p.2 < a})).toReal ≤
+      (pcs.map fun p => p.2.2 * segFrac (p.1, a) (p.2.1, a) (sq c θ 1)).sum := by
+  have hs' : 0 < Real.sin (Real.pi / 2 - θ) := by rw [Real.sin_pi_div_two_sub]; exact hc
+  have hc' : 0 < Real.cos (Real.pi / 2 - θ) := by rw [Real.cos_pi_div_two_sub]; exact hs
+  have h := side_x (c := swapXY c) hs' hc' (a := a) ha hwe hρ hd hwd pcs hch hpos hden hP
+  rw [volume_cap_y]
+  refine h.trans (le_of_eq ?_)
+  congr 1
+  refine List.map_congr_left fun p _ => ?_
+  rw [← segFrac_swap (c := c) (θ := θ) (p.1, a) (p.2.1, a)]
+  rfl
+
+end swap
+
+section pose
+
+open ZMTreeM
+
+variable {c : ℝ × ℝ} {θ : ℝ}
+
+/-- The segment mass of a sub-list of distinct entries is at most the whole segment mass. -/
+lemma segMass_ge_sub {D : ℕ} {segs : List SegE} (l : List SegE) (hnd : l.Nodup)
+    (hsub : ∀ x ∈ l, x ∈ segs) (Qs : Set (ℝ × ℝ)) :
+    (l.map fun x => (x.2.2.2.2 : ℝ) * segFrac (segA D x) (segB D x) Qs).sum ≤ segMass D segs Qs := by
+  unfold segMass
+  rw [← List.sum_toFinset _ hnd]
+  exact Finset.sum_le_sum_of_subset_of_nonneg (fun x hx => List.mem_toFinset.mpr (hsub x (List.mem_toFinset.mp hx)))
+    fun _ _ _ => mul_nonneg (Nat.cast_nonneg _) (segFrac_nonneg _ _ _)
+
+/-- **Lemma K at one pose**: if the square lies left of and below the far sides of the rectangle `e`
+(weight `we` per area) and its two caps are paid by distinct pieces of the cover, its mass is at
+least `we`. -/
+theorem lemmaK_pose {D : ℕ} (hD : 0 < D) {segs : List SegE} {rects : List RectE} {e : RectE}
+    (he : e ∈ rects) (hQ : ∀ p ∈ sq c θ 1, p.1 ≤ (e.2.2.1 : ℝ) / D ∧ p.2 ≤ (e.2.2.2.1 : ℝ) / D)
+    (chX chY : List SegE) (hnd : (chX ++ chY).Nodup) (hsegs : ∀ x ∈ chX ++ chY, x ∈ segs)
+    (hX : (e.2.2.2.2 : ℝ) * (volume (sq c θ 1 ∩ {p | p.1 < (e.1 : ℝ) / D})).toReal ≤
+      (chX.map fun x => (x.2.2.2.2 : ℝ) * segFrac (segA D x) (segB D x) (sq c θ 1)).sum)
+    (hY : (e.2.2.2.2 : ℝ) * (volume (sq c θ 1 ∩ {p | p.2 < (e.2.1 : ℝ) / D})).toReal ≤
+      (chY.map fun x => (x.2.2.2.2 : ℝ) * segFrac (segA D x) (segB D x) (sq c θ 1)).sum) :
+    (e.2.2.2.2 : ℝ) ≤ segMass D segs (sq c θ 1) + rectMass D rects (sq c θ 1) := by
+  set Qs := sq c θ 1
+  set we : ℝ := (e.2.2.2.2 : ℝ)
+  -- the area: `1 ≤ |Q ∩ R| + |Q ∩ {x < a}| + |Q ∩ {y < a'}|`
+  have hcover : Qs ⊆ (Qs ∩ rectSet D e) ∪ (Qs ∩ {p | p.1 < (e.1 : ℝ) / D}) ∪
+      (Qs ∩ {p | p.2 < (e.2.1 : ℝ) / D}) := by
+    intro p hp
+    obtain ⟨h1, h2⟩ := hQ p hp
+    by_cases hx : p.1 < (e.1 : ℝ) / D
+    · exact Or.inl (Or.inr ⟨hp, hx⟩)
+    by_cases hy : p.2 < (e.2.1 : ℝ) / D
+    · exact Or.inr ⟨hp, hy⟩
+    exact Or.inl (Or.inl ⟨hp, ⟨not_lt.mp hx, h1⟩, ⟨not_lt.mp hy, h2⟩⟩)
+  have hfin : ∀ S : Set (ℝ × ℝ), volume (Qs ∩ S) ≠ ⊤ := fun S =>
+    ne_top_of_le_ne_top (by rw [volume_sq]; exact ENNReal.one_ne_top) (measure_mono Set.inter_subset_left)
+  have harea : (1 : ℝ) ≤ (volume (Qs ∩ rectSet D e)).toReal +
+      (volume (Qs ∩ {p | p.1 < (e.1 : ℝ) / D})).toReal + (volume (Qs ∩ {p | p.2 < (e.2.1 : ℝ) / D})).toReal := by
+    set A := Qs ∩ rectSet D e
+    set B := Qs ∩ {p : ℝ × ℝ | p.1 < (e.1 : ℝ) / D}
+    set C := Qs ∩ {p : ℝ × ℝ | p.2 < (e.2.1 : ℝ) / D}
+    have h1 : volume Qs ≤ volume (A ∪ B ∪ C) := measure_mono hcover
+    have h2 : volume (A ∪ B ∪ C) ≤ volume A + volume B + volume C :=
+      (measure_union_le (A ∪ B) C).trans (by gcongr; exact measure_union_le A B)
+    have h := h1.trans h2
+    rw [volume_sq] at h
+    have := ENNReal.toReal_mono (ENNReal.add_ne_top.mpr ⟨ENNReal.add_ne_top.mpr ⟨hfin _, hfin _⟩, hfin _⟩) h
+    rwa [ENNReal.toReal_add (ENNReal.add_ne_top.mpr ⟨hfin _, hfin _⟩) (hfin _),
+      ENNReal.toReal_add (hfin _) (hfin _), ENNReal.toReal_one] at this
+  -- the rectangle's term of `rectMass`
+  have hrect : we * (volume (Qs ∩ rectSet D e)).toReal ≤ rectMass D rects Qs := by
+    unfold rectMass
+    exact Finset.single_le_sum (f := fun e : RectE => (e.2.2.2.2 : ℝ) * (volume (Qs ∩ rectSet D e)).toReal)
+      (fun _ _ => mul_nonneg (Nat.cast_nonneg _) ENNReal.toReal_nonneg) (List.mem_toFinset.mpr he)
+  have hseg := segMass_ge_sub (D := D) (chX ++ chY) hnd hsegs Qs
+  rw [List.map_append, List.sum_append] at hseg
+  have hwe : 0 ≤ we := Nat.cast_nonneg _
+  nlinarith [mul_le_mul_of_nonneg_left harea hwe]
+
+end pose
 
 end CapK
 
