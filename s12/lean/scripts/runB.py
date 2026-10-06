@@ -41,8 +41,8 @@ class MemBudget:
     """the running `lean`s, each charged max(its estimate, its resident memory now), within `gb`; no
     new `lean` while `MemAvailable` is below `floor`; below `guard`, the youngest `lean` is killed (its
     module is run again later, charged 1.5 times the peak it reached)"""
-    def __init__(self, gb, floor, guard):
-        self.gb, self.floor, self.guard = gb, floor, guard
+    def __init__(self, gb, floor, guard, maxn=10 ** 6):
+        self.gb, self.floor, self.guard, self.maxn = gb, floor, guard, maxn
         self.cv = threading.Condition()
         self.run = {}        # pid -> [estimate, start time, peak rss, killed]
         threading.Thread(target=self.watch, daemon=True).start()
@@ -52,7 +52,8 @@ class MemBudget:
 
     def acquire(self, c):
         with self.cv:
-            while self.run and (self.used() + c > self.gb or meminfo('MemAvailable') < self.floor):
+            while self.run and (self.used() + c > self.gb or meminfo('MemAvailable') < self.floor
+                                or len(self.run) >= self.maxn):
                 self.cv.wait(5)
 
     def start(self, pid, c):
@@ -175,7 +176,7 @@ def main():
     ap.add_argument('--roots', type=int, default=4, help='roots in flight at once')
     a = ap.parse_args()
     global BUDGET
-    BUDGET = MemBudget(a.mem, a.floor, a.guard)
+    BUDGET = MemBudget(a.mem, a.floor, a.guard, a.jobs)     # the adopted leans count toward --jobs
     ADOPTED.update(adopt())
     for pid in ADOPTED.values():
         BUDGET.start(pid, EST)
