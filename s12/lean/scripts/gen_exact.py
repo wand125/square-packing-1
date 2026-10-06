@@ -39,20 +39,23 @@ def svals(L, u, v):
 
 class Leaf:
     USE_TAN = True
-    MIXED_CH = False   # mixed segments without a separating split: the chord only
+    # mixed segments without a separating split: the chord only (zm's Lemma E: a line whose chord is
+    # empty at every sample is dropped, otherwise min up - max lo); with deep bisection of the sub-bins
+    MIXED_CH = os.environ.get('V7_MIXED_CH', '0') == '1'
+    MAXDEPTH = int(os.environ.get('V7_MAXDEPTH', '8'))
     # prefer the box-wide alternatives unless the vertex ones cut the combinations by this factor
     BOX_FACTOR = float(os.environ.get('V7_BOX_FACTOR', '1'))
     USE_CORNER = True
     ANCHOR = 'hi'
 
-    def __init__(self, cover, S, R, x0, x1, y0, y1, U0, U1, maxdepth=8):
+    def __init__(self, cover, S, R, x0, x1, y0, y1, U0, U1, maxdepth=None):
         side_, D, W, pts, segs, rects = cover
         self.D, self.W, self.S, self.R = D, W, S, R
         self.W0 = W          # the target of the leaf; W = W0 - credit for the vertex test
         self.cred = None
         self.Q = Q = D * S
         self.box = (x0, x1, y0, y1, U0, U1)
-        self.maxdepth = maxdepth
+        self.maxdepth = maxdepth if maxdepth is not None else Leaf.MAXDEPTH
         reach = 0.7072
         cx0, cx1, cy0, cy1 = x0 / Q, x1 / Q, y0 / Q, y1 / Q
         self.chs = [e for e in segs if e[1] == e[3] and e[0] < e[2]

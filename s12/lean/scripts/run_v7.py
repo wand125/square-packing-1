@@ -55,7 +55,7 @@ def scales(b):
     while (5 * Sl) % dx:
         Sl *= 2
     du = lcm(*[x.denominator for x in b[4:]])
-    return Sl, max(1 << 16, du << 10)
+    return Sl, max(1 << 16, du << 10) << RSHIFT
 
 
 CG, CH = 2048, F(1, 256)     # the credit's denominator and strip height (a multiple of 1/CG)
@@ -75,6 +75,7 @@ def set_credit(lf, b, ib, Rl):
     lf.W = lf.W0 - amt
 
 
+RSHIFT = int(os.environ.get('V7_RSHIFT', '0'))       # finer angle grid (2^RSHIFT) for deep bisection
 SPLIT_DEPTH = int(os.environ.get('V7_SPLIT', '3'))   # levels of splitting a failing leaf
 LIMIT0 = int(os.environ.get('V7_LIMIT0', '1800'))    # seconds per attempt before splitting
 
