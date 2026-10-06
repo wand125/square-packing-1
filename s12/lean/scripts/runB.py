@@ -123,6 +123,7 @@ def compile_mod(src, env):
     t = time.time()
     while True:
         BUDGET.acquire(c)
+        t1 = time.time()
         p = subprocess.Popen(['lean', '-o', olean, '-i', ilean, src], cwd=ROOT, env=env,
                              stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
         BUDGET.start(p.pid, c)
@@ -139,6 +140,8 @@ def compile_mod(src, env):
                 os.remove(f)
         c = max(c, 1.5 * peak)
     ok = p.returncode == 0
+    print(json.dumps(dict(mod=rel, sec=round(time.time() - t1, 1), peak=round(peak, 1), ok=ok)),
+          file=sys.stderr, flush=True)
     return ok, time.time() - t, '' if ok else out[-2000:]
 
 
