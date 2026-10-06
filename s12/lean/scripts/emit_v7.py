@@ -50,7 +50,7 @@ def emit(path, outdir):
         body.append(G.to_lean_split(lf, c['name']))
         g.leaf_names[b] = (f"{c['name']}_ok", c['S'], c['R'])
     hdr = ["import Sqpack.V7.Data", "import Sqpack.LemmaEDec", "namespace SquarePacking.LemmaELeaf",
-           "open ZMTreeM LemmaEVert LemmaEPoly ZMTree", "set_option maxRecDepth 100000",
+           "open ZMTreeM LemmaEVert LemmaEPoly ZMTree LemmaE", "set_option maxRecDepth 100000",
            "set_option maxHeartbeats 0"]
     txt = "\n".join(hdr + body + [g.root_thm(f"root_{idx:05d}", root, tree, _rects),
                                   "end SquarePacking.LemmaELeaf"]) + "\n"
@@ -62,7 +62,7 @@ def emit(path, outdir):
 
 
 HDR = ["import Sqpack.V7.Data", "import Sqpack.LemmaEDec"]
-OPEN = ["namespace SquarePacking.LemmaELeaf", "open ZMTreeM LemmaEVert LemmaEPoly ZMTree",
+OPEN = ["namespace SquarePacking.LemmaELeaf", "open ZMTreeM LemmaEVert LemmaEPoly ZMTree LemmaE",
         "set_option maxRecDepth 100000", "set_option maxHeartbeats 0"]
 
 

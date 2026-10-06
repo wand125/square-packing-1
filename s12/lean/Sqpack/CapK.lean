@@ -1,6 +1,7 @@
 import Sqpack.SquareArea
 import Sqpack.CovMP
 import Sqpack.D4
+import Sqpack.LemmaEPoly
 
 /-!
 # Lemma K (caps of the Lebesgue rectangle paid by the segments on its sides)
@@ -368,6 +369,260 @@ theorem lemmaK_pose {D : ℕ} (hD : 0 < D) {segs : List SegE} {rects : List Rect
   nlinarith [mul_le_mul_of_nonneg_left harea hwe]
 
 end pose
+
+section boxside
+
+variable {c : ℝ × ℝ} {θ : ℝ}
+
+/-- A nonempty chord: its ends are points of the square, so the line meets the square. -/
+lemma chord_pts (hs : 0 < Real.sin θ) (hc : 0 < Real.cos θ) {a : ℝ} (h : lo c θ a < hi c θ a) :
+    (a, lo c θ a) ∈ sq c θ 1 ∧ (a, hi c θ a) ∈ sq c θ 1 := by
+  constructor <;> rw [mem_sq_iff_slice hs hc] <;> simp only [lo, hi] at h ⊢ <;>
+    constructor <;> linarith [le_max_left (lowX c θ a) (lowY c θ a), min_le_left (upX c θ a) (upY c θ a)]
+
+lemma wid_eq (hs : 0 < Real.sin θ) (hc : 0 < Real.cos θ) : wid θ = Real.cos θ + Real.sin θ := by
+  simp [wid, abs_of_pos hs, abs_of_pos hc]
+
+/-- **One side over a box of centres and angles**: the conditions of `side_x` from bounds on the
+centre (`cx0 ≤ c.1`, `cy0 ≤ c.2 ≤ cy1`), on `cos θ + sin θ ≤ ŵ` and on `cos θ`, `sin θ`; the chain's
+ends cover the chord by the crude range `c_y ± ŵ/2` or by the tight one. -/
+theorem side_box (hs : 0 < Real.sin θ) (hc : 0 < Real.cos θ) {a cx0 cy0 cy1 w dbar we ρ : ℝ}
+    {cmin cmax smin smax : ℝ} (hc0 : cmin ≤ Real.cos θ) (hc1 : Real.cos θ ≤ cmax)
+    (hs0 : smin ≤ Real.sin θ) (hs1 : Real.sin θ ≤ smax)
+    (hcx : cx0 ≤ c.1) (hcy0 : cy0 ≤ c.2) (hcy1 : c.2 ≤ cy1) (hw : Real.cos θ + Real.sin θ ≤ w)
+    (ha : a ≤ cx0) (hdb : a - cx0 + w / 2 ≤ dbar) (hwe : 0 ≤ we) (hρ : 0 ≤ ρ) (hwd : we * dbar ≤ ρ)
+    (pcs : List (ℝ × ℝ × ℝ)) {P : ℝ} (hch : ChainFrom P (pcs.map fun p => (p.1, p.2.1)))
+    (hpos : ∀ p ∈ pcs, p.1 < p.2.1) (hden : ∀ p ∈ pcs, ρ * (p.2.1 - p.1) ≤ p.2.2)
+    (hlow : P ≤ cy0 - w / 2 ∨ (0 < smin ∧ P ≤ cy0 + (cmin - smax) / 2 - cmax / smin * dbar))
+    (hhigh : cy1 + w / 2 ≤ endOf P (pcs.map fun p => (p.1, p.2.1)) ∨
+      (0 < cmin ∧ cy1 + (cmax - smin) / 2 + smax / cmin * dbar ≤ endOf P (pcs.map fun p => (p.1, p.2.1)))) :
+    we * (volume (sq c θ 1 ∩ {p | p.1 < a})).toReal ≤
+      (pcs.map fun p => p.2.2 * segFrac (a, p.1) (a, p.2.1) (sq c θ 1)).sum := by
+  have hd : a - xmin c θ ≤ dbar := by simp only [xmin]; linarith
+  refine side_x hs hc (ha.trans hcx) hwe hρ hd hwd pcs hch hpos hden fun hlh => ?_
+  obtain ⟨plo, phi⟩ := chord_pts hs hc hlh
+  have hwid := wid_eq hs hc
+  -- the line meets the square: `d ≥ 0`
+  have hd0 : 0 ≤ a - xmin c θ := by
+    have := (abs_sub_le_wid plo).1
+    rw [abs_le, hwid] at this
+    simp only [xmin]; linarith [this.1]
+  have hlo := lo_ge (c := c) hs hc a
+  have hhi := hi_le (c := c) hs hc a
+  constructor
+  · rcases hlow with h | ⟨hsm, h⟩
+    · have := (abs_sub_le_wid plo).2
+      rw [abs_le, hwid] at this
+      linarith [this.1]
+    · have r1 : Real.cos θ / Real.sin θ ≤ cmax / smin := div_le_div₀ (hc.le.trans hc1) hc1 hsm hs0
+      have k : Real.cos θ / Real.sin θ * (a - xmin c θ) ≤ cmax / smin * dbar :=
+        (mul_le_mul_of_nonneg_right r1 hd0).trans
+          (mul_le_mul_of_nonneg_left hd (div_nonneg (hc.le.trans hc1) hsm.le))
+      linarith
+  · rcases hhigh with h | ⟨hcm, h⟩
+    · have := (abs_sub_le_wid phi).2
+      rw [abs_le, hwid] at this
+      linarith [this.2]
+    · have r1 : Real.sin θ / Real.cos θ ≤ smax / cmin := div_le_div₀ (hs.le.trans hs1) hs1 hcm hc0
+      have k : Real.sin θ / Real.cos θ * (a - xmin c θ) ≤ smax / cmin * dbar :=
+        (mul_le_mul_of_nonneg_right r1 hd0).trans
+          (mul_le_mul_of_nonneg_left hd (div_nonneg (hs.le.trans hs1) hcm.le))
+      linarith
+
+end boxside
+
+section check
+
+open ZMTreeM
+
+/-- A side's certificate: the boxes' squares never cross the line, or a chain of pieces `(p0, p1, w)`
+(over `D`, along the line) with weight per length `≥ ρ`. -/
+inductive SideC where
+  | far
+  | chain (pcs : List (ℕ × ℕ × ℕ)) (ρ : ℚ)
+
+/-- Consecutive pieces from `P`. -/
+def chainN : ℕ → List (ℕ × ℕ × ℕ) → Bool
+  | _, [] => true
+  | P, p :: l => p.1 == P && Nat.blt p.1 p.2.1 && chainN p.2.1 l
+
+def endN : ℕ → List (ℕ × ℕ × ℕ) → ℕ
+  | P, [] => P
+  | _, p :: l => endN p.2.1 l
+
+/-- **A side's test** for the line at `a`: centres in `cx0 ≤ c_⊥`, `cy0 ≤ c_∥ ≤ cy1`, `cos + sin ≤ w`,
+`cos ∈ [cmin, cmax]`, `sin ∈ [smin, smax]` (in the side's frame), rectangle weight `we` per area. -/
+def sideOk (D : ℕ) (a cx0 cy0 cy1 w we cmin cmax smin smax : ℚ) : SideC → Bool
+  | .far => decide (a + w / 2 ≤ cx0)
+  | .chain [] _ => false
+  | .chain (p :: l) ρ =>
+    let P : ℚ := (p.1 : ℚ) / D
+    let E : ℚ := (endN p.1 (p :: l) : ℚ) / D
+    let dbar := a - cx0 + w / 2
+    decide (a ≤ cx0) && decide (0 ≤ ρ) && decide (we * dbar ≤ ρ) && chainN p.1 (p :: l) &&
+      (p :: l).all (fun q => decide (ρ * (((q.2.1 : ℚ) - q.1) / D) ≤ q.2.2)) &&
+      (decide (P ≤ cy0 - w / 2) || (decide (0 < smin) &&
+        decide (P ≤ cy0 + (cmin - smax) / 2 - cmax / smin * dbar))) &&
+      (decide (cy1 + w / 2 ≤ E) || (decide (0 < cmin) &&
+        decide (cy1 + (cmax - smin) / 2 + smax / cmin * dbar ≤ E)))
+
+def sidePcs : SideC → List (ℕ × ℕ × ℕ)
+  | .far => []
+  | .chain pcs _ => pcs
+
+/-- A cap certificate: the rectangle, the side `x = e.1/D` and the side `y = e.2.1/D`. -/
+structure CapC where
+  e : RectE
+  sx : SideC
+  sy : SideC
+
+/-- The vertical pieces of the side `x = A` as segment entries, and the horizontal ones of `y = A`. -/
+def vSeg (A : ℕ) (p : ℕ × ℕ × ℕ) : SegE := (A, p.1, A, p.2.1, p.2.2)
+def hSeg (A : ℕ) (p : ℕ × ℕ × ℕ) : SegE := (p.1, A, p.2.1, A, p.2.2)
+
+/-- Bounds of `cos θ`, `sin θ` for `u = tan(θ/2) ∈ [U0/R, U1/R]`. -/
+def cminQ (R U1 : ℕ) : ℚ := ((R : ℚ) ^ 2 - (U1 : ℚ) ^ 2) / ((R : ℚ) ^ 2 + (U1 : ℚ) ^ 2)
+def cmaxQ (R U0 : ℕ) : ℚ := ((R : ℚ) ^ 2 - (U0 : ℚ) ^ 2) / ((R : ℚ) ^ 2 + (U0 : ℚ) ^ 2)
+def sminQ (R U0 : ℕ) : ℚ := 2 * (U0 : ℚ) * R / ((R : ℚ) ^ 2 + (U0 : ℚ) ^ 2)
+def smaxQ (R U1 : ℕ) : ℚ := 2 * (U1 : ℚ) * R / ((R : ℚ) ^ 2 + (U1 : ℚ) ^ 2)
+
+/-- **The test of a `CAP` box** (Lemma K). -/
+def capOk (D S R W x0 x1 y0 y1 U0 U1 : ℕ) (segs : List SegE) (rects : List RectE) (k : CapC) : Bool :=
+  let Q : ℚ := (D : ℚ) * S
+  let w : ℚ := (widN R U0 U1 : ℚ) / widD R U0
+  let we : ℚ := k.e.2.2.2.2
+  let segsK := (sidePcs k.sx).map (vSeg k.e.1) ++ (sidePcs k.sy).map (hSeg k.e.2.1)
+  Nat.blt U1 R && Nat.ble U0 U1 && rects.contains k.e && Nat.ble W k.e.2.2.2.2 &&
+    decide ((x1 : ℚ) / Q + w / 2 ≤ (k.e.2.2.1 : ℚ) / D) &&
+    decide ((y1 : ℚ) / Q + w / 2 ≤ (k.e.2.2.2.1 : ℚ) / D) &&
+    decide segsK.Nodup && segsK.all (fun x => segs.contains x) &&
+    sideOk D ((k.e.1 : ℚ) / D) (x0 / Q) (y0 / Q) (y1 / Q) w we (cminQ R U1) (cmaxQ R U0)
+      (sminQ R U0) (smaxQ R U1) k.sx &&
+    sideOk D ((k.e.2.1 : ℚ) / D) (y0 / Q) (x0 / Q) (x1 / Q) w we (sminQ R U0) (smaxQ R U1)
+      (cminQ R U1) (cmaxQ R U0) k.sy
+
+end check
+
+section checkSound
+
+open ZMTreeM LemmaEPoly
+
+lemma trig_bounds {R U0 U1 : ℕ} (hR : 0 < R) (hU1 : U1 < R) {u : ℝ} (hu0 : (U0 : ℝ) / R < u)
+    (hu1 : u ≤ (U1 : ℝ) / R) :
+    ((cminQ R U1 : ℚ) : ℝ) ≤ Real.cos (2 * Real.arctan u) ∧
+      Real.cos (2 * Real.arctan u) ≤ ((cmaxQ R U0 : ℚ) : ℝ) ∧
+      ((sminQ R U0 : ℚ) : ℝ) ≤ Real.sin (2 * Real.arctan u) ∧
+      Real.sin (2 * Real.arctan u) ≤ ((smaxQ R U1 : ℚ) : ℝ) ∧
+      0 < Real.sin (2 * Real.arctan u) ∧ 0 < Real.cos (2 * Real.arctan u) := by
+  have hRr : (0 : ℝ) < R := by exact_mod_cast hR
+  have hU0 : (0 : ℝ) ≤ U0 := Nat.cast_nonneg _
+  have h0 : (U0 : ℝ) < R * u := by rw [div_lt_iff₀ hRr] at hu0; linarith
+  have h1 : R * u ≤ (U1 : ℝ) := by rw [le_div_iff₀ hRr] at hu1; linarith
+  have hUR : (U1 : ℝ) < R := by exact_mod_cast hU1
+  have hu : 0 < u := by nlinarith
+  have hu1' : u < 1 := by nlinarith
+  rw [(trig u).1, (trig u).2]
+  simp only [cminQ, cmaxQ, sminQ, smaxQ]
+  push_cast
+  have hN : (0 : ℝ) < 1 + u ^ 2 := by positivity
+  have hRU0 : (0 : ℝ) < (R : ℝ) ^ 2 + (U0 : ℝ) ^ 2 := by positivity
+  have hRU1 : (0 : ℝ) < (R : ℝ) ^ 2 + (U1 : ℝ) ^ 2 := by positivity
+  refine ⟨?_, ?_, ?_, ?_, by positivity, div_pos (by nlinarith) hN⟩
+  · rw [div_le_div_iff₀ hRU1 hN]; nlinarith [mul_le_mul h1 h1 (by positivity) (by positivity)]
+  · rw [div_le_div_iff₀ hN hRU0]; nlinarith [mul_le_mul h0.le h0.le hU0 (by positivity)]
+  · rw [div_le_div_iff₀ hRU0 hN]
+    nlinarith [mul_nonneg hU0 hu.le, mul_nonneg (sub_nonneg.mpr h0.le) (sub_nonneg.mpr (by nlinarith : (U0 : ℝ) * u ≤ R)),
+      mul_pos hRr hu]
+  · rw [div_le_div_iff₀ hN hRU1]
+    nlinarith [mul_nonneg (sub_nonneg.mpr h1) (sub_nonneg.mpr (by nlinarith : (U1 : ℝ) * u ≤ R)), mul_pos hRr hu,
+      hU0]
+
+lemma chainN_sound {D : ℝ} (hD : 0 ≤ D) : ∀ (l : List (ℕ × ℕ × ℕ)) (P : ℕ), chainN P l = true →
+    ChainFrom ((P : ℝ) / D) (l.map fun p => ((p.1 : ℝ) / D, (p.2.1 : ℝ) / D)) ∧
+      endOf ((P : ℝ) / D) (l.map fun p => ((p.1 : ℝ) / D, (p.2.1 : ℝ) / D)) = (endN P l : ℝ) / D
+  | [], P, _ => ⟨trivial, rfl⟩
+  | p :: l, P, h => by
+    simp only [chainN, Bool.and_eq_true, beq_iff_eq, Nat.blt_eq] at h
+    obtain ⟨⟨h1, h2⟩, h3⟩ := h
+    obtain ⟨ih1, ih2⟩ := chainN_sound hD l p.2.1 h3
+    refine ⟨⟨by simp [h1], div_le_div_of_nonneg_right (by exact_mod_cast h2.le) hD, ih1⟩, ?_⟩
+    simp only [List.map_cons, endOf, endN]
+    exact ih2
+
+
+lemma chainN_pos : ∀ (l : List (ℕ × ℕ × ℕ)) (P : ℕ), chainN P l = true → ∀ q ∈ l, q.1 < q.2.1
+  | [], _, _, q, hq => by simp at hq
+  | p :: l, P, h, q, hq => by
+    simp only [chainN, Bool.and_eq_true, beq_iff_eq, Nat.blt_eq] at h
+    rcases List.mem_cons.mp hq with rfl | hq
+    · exact h.1.2
+    · exact chainN_pos l p.2.1 h.2 q hq
+
+/-- **A side's test is sound**: the cap times the rectangle's weight is paid by the side's pieces. -/
+theorem sideOk_sound {D : ℕ} (hD : 0 < D) {a cx0 cy0 cy1 w we cmin cmax smin smax : ℚ} {sc : SideC}
+    (h : sideOk D a cx0 cy0 cy1 w we cmin cmax smin smax sc = true) {c : ℝ × ℝ} {θ : ℝ}
+    (hs : 0 < Real.sin θ) (hc : 0 < Real.cos θ)
+    (hc0 : (cmin : ℝ) ≤ Real.cos θ) (hc1 : Real.cos θ ≤ cmax) (hs0 : (smin : ℝ) ≤ Real.sin θ)
+    (hs1 : Real.sin θ ≤ smax) (hcx : (cx0 : ℝ) ≤ c.1) (hcy0 : (cy0 : ℝ) ≤ c.2) (hcy1 : c.2 ≤ cy1)
+    (hw : Real.cos θ + Real.sin θ ≤ w) (hwe : 0 ≤ we) :
+    (we : ℝ) * (volume (sq c θ 1 ∩ {p | p.1 < (a : ℝ)})).toReal ≤
+      ((sidePcs sc).map fun q => (q.2.2 : ℝ) * segFrac ((a : ℝ), (q.1 : ℝ) / D) (a, (q.2.1 : ℝ) / D)
+        (sq c θ 1)).sum := by
+  have hDr : (0 : ℝ) < D := by exact_mod_cast hD
+  revert h
+  cases sc with
+  | far =>
+    intro h
+    simp only [sideOk, decide_eq_true_eq] at h
+    have hr : (a : ℝ) + w / 2 ≤ cx0 := by exact_mod_cast h
+    have hemp : sq c θ 1 ∩ {p | p.1 < (a : ℝ)} = ∅ := by
+      ext p
+      simp only [Set.mem_inter_iff, Set.mem_setOf_eq, Set.mem_empty_iff_false, iff_false, not_and, not_lt]
+      intro hp
+      have := (abs_sub_le_wid hp).1
+      rw [abs_le, wid_eq hs hc] at this
+      linarith [this.1]
+    simp [hemp, sidePcs]
+  | chain pcs ρ =>
+    intro h
+    rcases pcs with _ | ⟨p, l⟩
+    · simp [sideOk] at h
+    simp only [sideOk, Bool.and_eq_true, Bool.or_eq_true, decide_eq_true_eq, List.all_eq_true] at h
+    obtain ⟨⟨⟨⟨⟨⟨h1, h2⟩, h3⟩, h4⟩, h5⟩, h6⟩, h7⟩ := h
+    have hch := chainN_sound hDr.le (p :: l) p.1 h4
+    set pcsR : List (ℝ × ℝ × ℝ) := (p :: l).map fun q => ((q.1 : ℝ) / D, (q.2.1 : ℝ) / D, (q.2.2 : ℝ))
+    have hm : (pcsR.map fun q => (q.1, q.2.1)) = (p :: l).map fun q => ((q.1 : ℝ) / D, (q.2.1 : ℝ) / D) := by
+      simp only [pcsR, List.map_map, Function.comp_def]
+    have hres := side_box (c := c) (θ := θ) hs hc hc0 hc1 hs0 hs1 hcx hcy0 hcy1 hw
+      (a := (a : ℝ)) (dbar := ((a - cx0 + w / 2 : ℚ) : ℝ)) (we := (we : ℝ)) (ρ := (ρ : ℝ))
+      (by exact_mod_cast h1) (by push_cast; exact le_rfl) (by exact_mod_cast hwe) (by exact_mod_cast h2)
+      (by exact_mod_cast h3) pcsR (P := (p.1 : ℝ) / D) (by rw [hm]; exact hch.1)
+      (by
+        intro q hq
+        obtain ⟨q', hq', rfl⟩ := List.mem_map.mp hq
+        exact div_lt_div_of_pos_right (by exact_mod_cast chainN_pos _ _ h4 q' hq') hDr)
+      (by
+        intro q hq
+        obtain ⟨q', hq', rfl⟩ := List.mem_map.mp hq
+        have := h5 q' hq'
+        have hr : ((ρ * (((q'.2.1 : ℚ) - q'.1) / D) : ℚ) : ℝ) ≤ ((q'.2.2 : ℚ) : ℝ) := by exact_mod_cast this
+        push_cast at hr
+        simp only
+        rw [← sub_div]; exact hr)
+      (by
+        rcases h6 with h6 | ⟨h6a, h6b⟩
+        · left; have := (Rat.cast_le (K := ℝ)).mpr h6; push_cast at this ⊢; linarith
+        · right; refine ⟨by exact_mod_cast h6a, ?_⟩
+          have := (Rat.cast_le (K := ℝ)).mpr h6b; push_cast at this ⊢; linarith)
+      (by
+        rw [hm, hch.2]
+        rcases h7 with h7 | ⟨h7a, h7b⟩
+        · left; have := (Rat.cast_le (K := ℝ)).mpr h7; push_cast at this ⊢; linarith
+        · right; refine ⟨by exact_mod_cast h7a, ?_⟩
+          have := (Rat.cast_le (K := ℝ)).mpr h7b; push_cast at this ⊢; linarith)
+    simpa [pcsR, sidePcs, List.map_map, Function.comp_def] using hres
+
+end checkSound
 
 end CapK
 
