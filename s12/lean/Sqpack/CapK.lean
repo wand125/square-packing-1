@@ -622,6 +622,67 @@ theorem sideOk_sound {D : ℕ} (hD : 0 < D) {a cx0 cy0 cy1 w we cmin cmax smin s
           have := (Rat.cast_le (K := ℝ)).mpr h7b; push_cast at this ⊢; linarith)
     simpa [pcsR, sidePcs, List.map_map, Function.comp_def] using hres
 
+
+/-- **Lemma K on a box**: a passing `CAP` certificate covers the box. -/
+theorem capOk_sound {D S Mq R W x0 x1 y0 y1 U0 U1 : ℕ} {pts : List (ℕ × ℕ × ℕ)} {segs : List SegE}
+    {rects : List RectE} {k : CapC} (hD : 0 < D) (hS : 0 < S) (hR : 0 < R)
+    (h : capOk D S R W x0 x1 y0 y1 U0 U1 segs rects k = true) :
+    CovMPo D S Mq R W pts segs rects x0 x1 y0 y1 U0 U1 := by
+  intro c u hx0 hx1 hy0 hy1 hu0 hu1 _
+  simp only [capOk, Bool.and_eq_true, Nat.blt_eq, Nat.ble_eq, decide_eq_true_eq, List.all_eq_true,
+    List.contains_iff_mem] at h
+  obtain ⟨⟨⟨⟨⟨⟨⟨⟨⟨hU1, _⟩, he⟩, hW⟩, hxr⟩, hyr⟩, hnd⟩, hin⟩, hsx⟩, hsy⟩ := h
+  set θ := 2 * Real.arctan u
+  obtain ⟨hc0, hc1, hs0, hs1, hs, hc⟩ := trig_bounds hR hU1 hu0 hu1
+  have hDr : (0 : ℝ) < D := by exact_mod_cast hD
+  have hSr : (0 : ℝ) < S := by exact_mod_cast hS
+  have hwid : wid θ ≤ (widN R U0 U1 : ℝ) / widD R U0 :=
+    wid_le_widHat hR hU1.le hu0.le hu1
+  rw [wid_eq hs hc] at hwid
+  have cQ : ∀ n : ℕ, (((n : ℚ) / ((D : ℚ) * S) : ℚ) : ℝ) = (n : ℝ) / (D * S) := fun n => by push_cast; rfl
+  have cw : (((widN R U0 U1 : ℚ) / widD R U0 : ℚ) : ℝ) = (widN R U0 U1 : ℝ) / widD R U0 := by push_cast; rfl
+  have cA : ∀ n : ℕ, (((n : ℚ) / D : ℚ) : ℝ) = (n : ℝ) / D := fun n => by push_cast; rfl
+  -- the square is left of and below the far sides
+  have hxr' := (Rat.cast_le (K := ℝ)).mpr hxr
+  have hyr' := (Rat.cast_le (K := ℝ)).mpr hyr
+  push_cast at hxr' hyr'
+  have hQ : ∀ p ∈ sq c θ 1, p.1 ≤ (k.e.2.2.1 : ℝ) / D ∧ p.2 ≤ (k.e.2.2.2.1 : ℝ) / D := by
+    intro p hp
+    obtain ⟨a1, a2⟩ := abs_sub_le_wid hp
+    rw [abs_le, wid_eq hs hc] at a1 a2
+    constructor <;> linarith [a1.2, a2.2]
+  -- the side `x = e.1/D`
+  have hX := sideOk_sound hD hsx (c := c) (θ := θ) hs hc
+    (by exact_mod_cast hc0) (by exact_mod_cast hc1) (by exact_mod_cast hs0) (by exact_mod_cast hs1)
+    (by rw [cQ]; exact hx0) (by rw [cQ]; exact hy0) (by rw [cQ]; exact hy1) (by rw [cw]; exact hwid)
+    (by positivity)
+  -- the side `y = e.2.1/D`, on the swapped square
+  have hs' : 0 < Real.sin (Real.pi / 2 - θ) := by rw [Real.sin_pi_div_two_sub]; exact hc
+  have hc' : 0 < Real.cos (Real.pi / 2 - θ) := by rw [Real.cos_pi_div_two_sub]; exact hs
+  have hY := sideOk_sound hD hsy (c := swapXY c) (θ := Real.pi / 2 - θ) hs' hc'
+    (by rw [Real.cos_pi_div_two_sub]; exact_mod_cast hs0) (by rw [Real.cos_pi_div_two_sub]; exact_mod_cast hs1)
+    (by rw [Real.sin_pi_div_two_sub]; exact_mod_cast hc0) (by rw [Real.sin_pi_div_two_sub]; exact_mod_cast hc1)
+    (by rw [cQ]; exact hy0) (by rw [cQ]; exact hx0) (by rw [cQ]; exact hx1)
+    (by rw [cw, Real.cos_pi_div_two_sub, Real.sin_pi_div_two_sub]; linarith) (by positivity)
+  rw [← volume_cap_y] at hY
+  have hK := lemmaK_pose (c := c) (θ := θ) hD he hQ ((sidePcs k.sx).map (vSeg k.e.1))
+    ((sidePcs k.sy).map (hSeg k.e.2.1)) hnd hin
+    (by
+      refine (le_of_eq ?_).trans (hX.trans (le_of_eq ?_))
+      · rw [cA]; push_cast; rfl
+      · simp only [List.map_map, Function.comp_def, vSeg, segA, segB, cA])
+    (by
+      refine (le_of_eq ?_).trans (hY.trans (le_of_eq ?_))
+      · rw [cA]; push_cast; rfl
+      · simp only [List.map_map, Function.comp_def, hSeg, segA, segB, cA]
+        congr 1
+        refine List.map_congr_left fun q _ => ?_
+        rw [← segFrac_swap (c := c) (θ := θ)]
+        rfl)
+  have hWr : (W : ℝ) ≤ k.e.2.2.2.2 := by exact_mod_cast hW
+  have := ptMass_nonneg D pts (sq c θ 1)
+  linarith
+
 end checkSound
 
 end CapK
