@@ -22,7 +22,7 @@ def main(out):
     step = Q // 10                      # 1/10
     lo, hi = Q // 2, 7 * Q // 2         # 1/2 .. 7/2
     xs = list(range(lo, hi + 1, step))
-    lines = ["import Sqpack.V7.Data", "namespace SquarePacking.LemmaELeaf",
+    lines = ["import Sqpack.V7.Data", "import Sqpack.LemmaZ", "namespace SquarePacking.LemmaELeaf",
              "open ZMTreeM ZMTree", "set_option maxRecDepth 100000", ""]
     names = {}
     for i in range(len(xs) - 1):

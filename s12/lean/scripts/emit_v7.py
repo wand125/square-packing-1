@@ -129,11 +129,13 @@ def main():
     ap.add_argument('--out', default=os.path.join(HERE, '..', 'Sqpack', 'V7'))
     ap.add_argument('--lo', type=int, default=0)
     ap.add_argument('--hi', type=int, default=10 ** 9)
+    ap.add_argument('--mod', type=int, default=1, help='only the roots with index %% MOD == REM')
+    ap.add_argument('--rem', type=int, default=0)
     ap.add_argument('--nproc', type=int, default=1)
     ap.add_argument('--chunk', type=int, default=0, help='split modules: pair theorems per row group (0: one module per root)')
     a = ap.parse_args()
     paths = sorted(p for p in glob.glob(os.path.join(a.cert, 'R*.pkl'))
-                   if a.lo <= int(os.path.basename(p)[1:6]) < a.hi)
+                   if a.lo <= int(os.path.basename(p)[1:6]) < a.hi and int(os.path.basename(p)[1:6]) % a.mod == a.rem)
     with Pool(a.nproc) as pool:
         tot = 0
         jobs = [(p, a.out, a.chunk) for p in paths] if a.chunk else [(p, a.out) for p in paths]
