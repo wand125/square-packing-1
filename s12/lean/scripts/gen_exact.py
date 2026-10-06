@@ -43,6 +43,7 @@ class Leaf:
     # empty at every sample is dropped, otherwise min up - max lo); with deep bisection of the sub-bins
     MIXED_CH = os.environ.get('V7_MIXED_CH', '0') == '1'
     MAXDEPTH = int(os.environ.get('V7_MAXDEPTH', '8'))
+    CAP_TAG = os.environ.get('V7_CAP_TAG', '0') == '1'
     # prefer the box-wide alternatives unless the vertex ones cut the combinations by this factor
     BOX_FACTOR = float(os.environ.get('V7_BOX_FACTOR', '1'))
     USE_CORNER = True
@@ -167,9 +168,10 @@ class Leaf:
         sig = ev(Dp[m0:], (b0 + b1) / 2 / R) > 0
         def qsign(q):
             return [svals(q, u, v) >= 0 for u, v in pts]
+        capk = {}     # (axis, coordinate of the rectangle's side) -> split on its cap depth
         for r in self.crs:
             pair = []
-            for cap in (capXm(self.D, r), capYm(self.D, r)):
+            for ax, cap in (('x', capXm(self.D, r)), ('y', capYm(self.D, r))):
                 ds = [svals(cap, u, v) for u, v in pts]
                 ss = [2 * u / (1 + u * u) for u, _ in pts]
                 if all(d <= 0 for d in ds): pair.append([('zeroC',)])
@@ -178,12 +180,13 @@ class Leaf:
                 elif any(d < 0 for d in ds):
                     k = len(splits); splits.append((cap, 0, 1, 0, 1))
                     pair.append([('zeroT', k), ('parT', k, True)])
+                    capk[(ax, r[0][0] if ax == 'x' else r[0][1])] = k
                 else:
                     k = len(splits); splits.append((sl_sub(cap, sSL(1)), 0, 1, 0, 1))
                     pair.append([('parT', k, False), ('linT', k)])
             lc.append(tuple(pair))
         tol = 1e-9
-        def pick(ups, los, bx):
+        def pick(ups, los, bx, side=None):
             Ua, La, posl = set(), set(), []
             for u, v in pts:
                 uv = [svals(L, u, v) for L in ups]; lv = [svals(L, u, v) for L in los]
@@ -192,6 +195,12 @@ class Leaf:
                 if mu - ml > -1e-9:
                     Ua |= {i for i in range(3) if uv[i] <= mu + tol}
                     La |= {i for i in range(3) if lv[i] >= ml - tol}
+            if side in capk and Leaf.CAP_TAG and ((bx[0] and bx[1]) or (Ua and La)):
+                # a segment on a side of the Lebesgue rectangle whose cap is split: where the square pokes
+                # past the side (cap depth >= 0) its chord pays for the cap's area, elsewhere it is dropped
+                k = capk[side]
+                return [(('drop',), (k, False)), (('box',) if bx[0] and bx[1] else ('alt', sorted(Ua), sorted(La)),
+                                                  (k, True))]
             if not any(posl): return [(('drop',), None)]
             ch = ('box',) if len(bx[0]) * len(bx[1]) == 1 or \
                 len(bx[0]) * len(bx[1]) <= Leaf.BOX_FACTOR * len(Ua) * len(La) \
@@ -219,8 +228,8 @@ class Leaf:
                 # it is slightly negative, much less than what `drop` loses where it just meets
                 return [(ch, None)]
             return [(('drop',), None), (ch, None)]
-        hc = [pick(hUps(self.D, e), hLos(self.D, e), bx) for e, bx in zip(self.chs, self.hbx)]
-        vc = [pick(vUps(self.D, e), vLos(self.D, e), bx) for e, bx in zip(self.cvs, self.vbx)]
+        hc = [pick(hUps(self.D, e), hLos(self.D, e), bx, ('y', e[1])) for e, bx in zip(self.chs, self.hbx)]
+        vc = [pick(vUps(self.D, e), vLos(self.D, e), bx, ('x', e[0])) for e, bx in zip(self.cvs, self.vbx)]
         return [splits, [], hc, vc, lc]
 
     def factor_certs(self, sig, Dp, X, Y, b0, b1, cert):
@@ -461,6 +470,88 @@ def lcred(cr):
 
 
 
+SPLIT_MIN = int(os.environ.get('V7_SPLIT_MIN', '64'))   # a pair with more combinations is split
+SPLIT_CHUNK = int(os.environ.get('V7_SPLIT_CHUNK', '64'))  # combinations per kernel check
+
+
+def _nalts(sc, bx):
+    """the number of terms of `segCAltsK` for a segment certificate"""
+    if sc[0] == 'drop': return 1
+    if sc[0] == 'box': return len(bx[0]) * len(bx[1])
+    return len(sc[1]) * len(sc[2])
+
+
+def n_combos(lf, v, pat):
+    """`(vL c D chs cvs crs hbx vbx v pat).length` (`LemmaESplit.vL`)"""
+    n = 1
+    for bx, l in zip(lf.hbx, v[2]):
+        n *= sum(_nalts(x[0], bx) for x in l if tagOk(pat, x[1]))
+    for bx, l in zip(lf.vbx, v[3]):
+        n *= sum(_nalts(x[0], bx) for x in l if tagOk(pat, x[1]))
+    for r, (xs, ys) in zip(lf.crs, v[4]):
+        k = 1 if r[3][0] == 'std' else 2
+        n *= k * sum(1 for ax in xs if tagOk(pat, capTag(ax))) * sum(1 for ay in ys if tagOk(pat, capTag(ay)))
+    return n
+
+
+def pair_combos(lf, cert):
+    if not isinstance(cert, list): return 0
+    return sum(n_combos(lf, sb[3][1], p) for sb in cert if sb[3][0] == 'val' for p in pats(len(sb[3][1][0])))
+
+
+def pair_split(lf, name, i, j, cert, sctx, P, U0, U1, W, D, R):
+    """the pair theorem `{name}_{i}_{j}` from one kernel check per sub-bin, and per chunk of
+    combinations of a heavy sub-bin (`LemmaESplit`)"""
+    dk = "by decide +kernel"
+    q0 = "((([0], [0], [0]) : PL), PairCert.par)"
+    X = f"(({name}_Z {i}).getD {j} {q0})"
+    S = f"(sbsOf {X}.2)"
+    Q = f"{X}.1"
+    nm = f"{name}_{i}_{j}"
+    m = SPLIT_CHUNK
+    out = []
+    lists = f"{name}.chs {name}.cvs {name}.crs {name}.hbx {name}.vbx"
+    for t, sb in enumerate(cert):
+        sbT = f"({S}.getD {t} dSB)"
+        b0T = f"(bAt {U0} {S} {t})"
+        stmt = f"subOk {sctx} {P} {Q} {b0T} {sbT} = true"
+        v = sb[3][1] if sb[3][0] == 'val' else None
+        if v is None or sum(n_combos(lf, v, p) for p in pats(len(v[0]))) <= m:
+            out.append(f"theorem {nm}_s{t} : {stmt} := {dk}\n")
+            continue
+        c, vv = f"{nm}_c{t}", f"{nm}_v{t}"
+        out.append(f"def {c} : LemmaEK.Ctx := LemmaEK.mkCtx (detP {P} {Q}) (xP {P} {Q}) (yP {P} {Q}) {b0T} {sbT}.b1 {R} LemmaEK.kK\n")
+        out.append(f"def {vv} : VCert := vcOf {sbT}.kind\n")
+        out.append(f"theorem {nm}_s{t}_h : vHead {c} {D} {sbT}.σ {lists} {vv} = true := {dk}\n")
+        ps = pats(len(v[0]))
+        PA = f"(pats {vv}.splits.length)"
+        Lf = lambda pt: f"(vL {c} {D} {lists} {vv} {pt})"
+        Ff = lambda pt: f"(vF {c} ({W}) {sbT}.σ {b0T} {sbT}.b1 {R} {vv} {pt})"
+        terms = []
+        for p, pat in enumerate(ps):
+            pt = f"({PA}.getD {p} [])"
+            n = n_combos(lf, v, pat)
+            ks = list(range(0, n, m))
+            out.append(f"theorem {nm}_s{t}_p{p} : vPre {vv} {pt} = true := {dk}\n")
+            for k in ks:
+                out.append(f"theorem {nm}_s{t}_p{p}_k{k} : (({Lf(pt)}.drop {k}).take {m}).all {Ff(pt)} = true := {dk}\n")
+            tc = f"all_drop_end {Ff(pt)} {Lf(pt)} {len(ks) * m} ({dk})"
+            for k in reversed(ks):
+                tc = f"all_chunk_step {Ff(pt)} {Lf(pt)} {k} {m} {nm}_s{t}_p{p}_k{k}\n      ({tc})"
+            terms.append(f"and_of {nm}_s{t}_p{p} (all_of_drop_zero ({tc}))")
+        G = f"(fun pat => vPre {vv} pat && {Lf('pat')}.all {Ff('pat')})"
+        tp = f"all_drop_end {G} {PA} {len(ps)} ({dk})"
+        for p in reversed(range(len(ps))):
+            tp = f"all_drop_step {G} {PA} {p} [] ({dk})\n    ({terms[p]})\n    ({tp})"
+        out.append(f"theorem {nm}_s{t} : {stmt} :=\n  subOk_of_val ({dk}) ({dk}) ({dk}) ({dk})\n"
+                   f"    (vertOkK'_of {nm}_s{t}_h\n    ({tp}))\n")
+    tb = f"binsOk_end {len(cert)} ({dk}) ({dk})"
+    for t in reversed(range(len(cert))):
+        tb = f"binsOk_step {t} ({dk}) {nm}_s{t}\n    ({tb})"
+    out.append(f"theorem {nm} : {name}_p {i} {X} = true :=\n  pairOk_of_sbs ({dk})\n    ({tb})\n")
+    return "\n".join(out)
+
+
 def to_lean_parts(lf, name, segs="tsegs", rects="trects"):
     """The leaf in parts: the definitions with the head theorem, one block per row (its pair
     theorems and the row theorem), and the `exOk` theorem gluing the rows."""
@@ -484,6 +575,13 @@ def to_lean_parts(lf, name, segs="tsegs", rects="trects"):
         out = []
         m = len(lf.certs[i]) if i < len(lf.certs) else 0
         for j in range(m):
+            cert = lf.certs[i][j]
+            if pair_combos(lf, cert) > SPLIT_MIN:
+                out.append(pair_split(lf, name, i, j, cert,
+                                      f"{D} ({W} - credAmt {name}) {R} {side} {name}.chs {name}.cvs {name}.crs "
+                                      f"{name}.hbx {name}.vbx", f"({name}_L.getD {i} {d0})",
+                                      U0, U1, f"{W} - credAmt {name}", D, R))
+                continue
             out.append(f"theorem {name}_{i}_{j} : {name}_p {i} (({name}_Z {i}).getD {j} {q0}) = true := {dk}\n")
         t = f"all_drop_end ({name}_p {i}) ({name}_Z {i}) {m} ({dk})"
         for j in reversed(range(m)):
