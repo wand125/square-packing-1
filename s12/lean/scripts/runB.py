@@ -163,14 +163,15 @@ def root_job(idx, pool, env):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('--lo', type=int, required=True)
-    ap.add_argument('--hi', type=int, required=True)
+    ap.add_argument('--lo', type=int, default=0)
+    ap.add_argument('--hi', type=int, default=10 ** 6)
     ap.add_argument('--jobs', type=int, default=8)
     ap.add_argument('--mod', type=int, default=1, help='only the roots with index %% MOD == REM')
     ap.add_argument('--rem', type=int, default=0)
     ap.add_argument('--mem', type=float, default=440, help='GB budget over max(estimate, resident) of the leans')
     ap.add_argument('--floor', type=float, default=80, help='GB of MemAvailable below which no lean starts')
     ap.add_argument('--guard', type=float, default=30, help='GB of MemAvailable below which the youngest lean is killed')
+    ap.add_argument('--list', help='a file of root indices, run in this order (instead of lo..hi)')
     ap.add_argument('--roots', type=int, default=4, help='roots in flight at once')
     a = ap.parse_args()
     global BUDGET
@@ -180,7 +181,8 @@ def main():
         BUDGET.start(pid, EST)
     print(json.dumps(dict(adopted=len(ADOPTED))), flush=True)
     env = dict(os.environ, LEAN_PATH=lean_path())
-    idxs = [i for i in range(a.lo, a.hi) if i % a.mod == a.rem and os.path.exists(os.path.join(ROOT, 'Sqpack', 'V7', f'R{i:05d}.lean'))
+    order = [int(x) for x in open(a.list).read().split()] if a.list else range(a.lo, a.hi)
+    idxs = [i for i in order if i % a.mod == a.rem and os.path.exists(os.path.join(ROOT, 'Sqpack', 'V7', f'R{i:05d}.lean'))
             and not os.path.exists(os.path.join(LIB, 'Sqpack', 'V7', f'R{i:05d}.olean'))]
     print(json.dumps(dict(todo=len(idxs))), flush=True)
     with ThreadPoolExecutor(a.jobs) as pool, ThreadPoolExecutor(a.roots) as outer:
