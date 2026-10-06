@@ -25,6 +25,8 @@ def compile_mod(src, env):
     rel = os.path.relpath(src, ROOT)[:-5]
     olean = os.path.join(LIB, rel + '.olean'); ilean = os.path.join(LIB, rel + '.ilean')
     os.makedirs(os.path.dirname(olean), exist_ok=True)
+    if os.path.exists(ilean) and os.path.getmtime(ilean) >= os.path.getmtime(src):
+        return True, 0.0, ''     # done by an earlier run (the .ilean is written after the .olean)
     t = time.time()
     p = subprocess.run(['lean', '-o', olean, '-i', ilean, src], cwd=ROOT, env=env, capture_output=True, text=True)
     ok = p.returncode == 0
