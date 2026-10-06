@@ -67,7 +67,8 @@ def emit(path, outdir):
 
 
 HDR = ["import Sqpack.V7.Data", "import Sqpack.LemmaEDec", "import Sqpack.CapK"]
-OPEN = ["namespace SquarePacking.LemmaELeaf", "open ZMTreeM LemmaEVert LemmaEPoly ZMTree LemmaE",
+OPEN = ["noncomputable section  -- checked by the kernel only: no compiled code",
+        "namespace SquarePacking.LemmaELeaf", "open ZMTreeM LemmaEVert LemmaEPoly ZMTree LemmaE",
         "set_option maxRecDepth 100000", "set_option maxHeartbeats 0"]
 
 
