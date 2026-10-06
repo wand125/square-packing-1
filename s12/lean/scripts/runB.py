@@ -20,39 +20,89 @@ def lean_path():
     return out.stdout.strip()
 
 
-class MemBudget:
-    """a budget of GB over the running `lean`s (each charged its estimate `cost`), and a floor on the
-    free memory (`MemAvailable`) below which no new `lean` starts"""
-    def __init__(self, gb, floor):
-        self.left, self.floor, self.cv = gb, floor, threading.Condition()
+def meminfo(key):
+    for line in open('/proc/meminfo'):
+        if line.startswith(key + ':'):
+            return int(line.split()[1]) / 2 ** 20
+    return 0.0
 
-    def avail(self):
-        for line in open('/proc/meminfo'):
-            if line.startswith('MemAvailable:'):
+
+def rss(pid):
+    try:
+        for line in open(f'/proc/{pid}/status'):
+            if line.startswith('VmRSS:'):
                 return int(line.split()[1]) / 2 ** 20
-        return 1e9
+    except OSError:
+        pass
+    return 0.0
+
+
+class MemBudget:
+    """the running `lean`s, each charged max(its estimate, its resident memory now), within `gb`; no
+    new `lean` while `MemAvailable` is below `floor`; below `guard`, the youngest `lean` is killed (its
+    module is run again later, charged 1.5 times the peak it reached)"""
+    def __init__(self, gb, floor, guard):
+        self.gb, self.floor, self.guard = gb, floor, guard
+        self.cv = threading.Condition()
+        self.run = {}        # pid -> [estimate, start time, peak rss, killed]
+        threading.Thread(target=self.watch, daemon=True).start()
+
+    def used(self):
+        return sum(max(r[0], r[2]) for r in self.run.values())
 
     def acquire(self, c):
         with self.cv:
-            while c > self.left or self.avail() < self.floor:
+            while self.run and (self.used() + c > self.gb or meminfo('MemAvailable') < self.floor):
                 self.cv.wait(5)
-            self.left -= c
 
-    def release(self, c):
+    def start(self, pid, c):
         with self.cv:
-            self.left += c
+            self.run[pid] = [c, time.time(), rss(pid), False]
+
+    def finish(self, pid):
+        with self.cv:
+            r = self.run.pop(pid, [0, 0, 0.0, False])
             self.cv.notify_all()
+            return r
+
+    def watch(self):
+        while True:
+            time.sleep(3)
+            with self.cv:
+                for pid, r in self.run.items():
+                    r[2] = max(r[2], rss(pid))
+                if self.run and meminfo('MemAvailable') < self.guard:
+                    pid, r = max(((p, r) for p, r in self.run.items() if not r[3]),
+                                 key=lambda x: x[1][1], default=(None, None))
+                    if pid is not None:
+                        r[3] = True
+                        try:
+                            os.kill(pid, 9)
+                        except OSError:
+                            pass
+                self.cv.notify_all()
 
 
+def adopt():
+    """the `lean -o` already running (left by an earlier run): source path -> pid"""
+    out = {}
+    for d in os.listdir('/proc'):
+        if d.isdigit():
+            try:
+                argv = open(f'/proc/{d}/cmdline').read().split('\0')
+            except OSError:
+                continue
+            if argv and os.path.basename(argv[0]) == 'lean' and '-o' in argv and len(argv) > 1:
+                src = [x for x in argv if x.endswith('.lean')]
+                if src:
+                    out[os.path.normpath(os.path.join(ROOT, src[-1]))] = int(d)
+    return out
+
+
+ADOPTED = {}
 BUDGET = None
-COST = dict(base=10.0, per_mb=3.0, root=36.0)
-
-
-def cost(src):
-    """the estimated peak GB of `lean` on one module (calibrated on the largest modules)"""
-    if re.search(r'/R\d{5}\.lean$', src):
-        return COST['root']
-    return COST['base'] + COST['per_mb'] * os.path.getsize(src) / 2 ** 20
+EST = 12.0          # GB, the default estimate of one module
+KILLED = []         # (module, peak GB) of the lean killed for memory
 
 
 def compile_mod(src, env):
@@ -60,17 +110,32 @@ def compile_mod(src, env):
     rel = os.path.relpath(src, ROOT)[:-5]
     olean = os.path.join(LIB, rel + '.olean'); ilean = os.path.join(LIB, rel + '.ilean')
     os.makedirs(os.path.dirname(olean), exist_ok=True)
+    pid = ADOPTED.get(os.path.normpath(src))
+    if pid:      # an earlier run's lean on this module: wait for it
+        while os.path.exists(f'/proc/{pid}'):
+            time.sleep(10)
+        BUDGET.finish(pid)
     if os.path.exists(ilean) and os.path.getmtime(ilean) >= os.path.getmtime(src):
         return True, 0.0, ''     # done by an earlier run (the .ilean is written after the .olean)
-    c = cost(src)
-    BUDGET.acquire(c)
+    c = EST
     t = time.time()
-    try:
-        p = subprocess.run(['lean', '-o', olean, '-i', ilean, src], cwd=ROOT, env=env, capture_output=True, text=True)
-    finally:
-        BUDGET.release(c)
+    while True:
+        BUDGET.acquire(c)
+        p = subprocess.Popen(['lean', '-o', olean, '-i', ilean, src], cwd=ROOT, env=env,
+                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        BUDGET.start(p.pid, c)
+        out, _ = p.communicate()
+        est, _, peak, killed = BUDGET.finish(p.pid)
+        if not killed:
+            break
+        KILLED.append((rel, round(peak, 1)))
+        print(json.dumps(dict(killed=rel, peak=round(peak, 1))), file=sys.stderr, flush=True)
+        for f in (olean, ilean):
+            if os.path.exists(f):
+                os.remove(f)
+        c = max(c, 1.5 * peak)
     ok = p.returncode == 0
-    return ok, time.time() - t, '' if ok else (p.stdout + p.stderr)[-2000:]
+    return ok, time.time() - t, '' if ok else out[-2000:]
 
 
 def root_job(idx, pool, env):
@@ -96,15 +161,17 @@ def main():
     ap.add_argument('--jobs', type=int, default=8)
     ap.add_argument('--mod', type=int, default=1, help='only the roots with index %% MOD == REM')
     ap.add_argument('--rem', type=int, default=0)
-    ap.add_argument('--mem', type=float, default=400, help='GB budget over the estimated peaks')
-    ap.add_argument('--floor', type=float, default=60, help='GB of MemAvailable below which no lean starts')
-    ap.add_argument('--cost', default='', help='base,per_mb,root (GB)')
+    ap.add_argument('--mem', type=float, default=440, help='GB budget over max(estimate, resident) of the leans')
+    ap.add_argument('--floor', type=float, default=80, help='GB of MemAvailable below which no lean starts')
+    ap.add_argument('--guard', type=float, default=30, help='GB of MemAvailable below which the youngest lean is killed')
     ap.add_argument('--roots', type=int, default=4, help='roots in flight at once')
     a = ap.parse_args()
     global BUDGET
-    BUDGET = MemBudget(a.mem, a.floor)
-    if a.cost:
-        COST.update(zip(('base', 'per_mb', 'root'), map(float, a.cost.split(','))))
+    BUDGET = MemBudget(a.mem, a.floor, a.guard)
+    ADOPTED.update(adopt())
+    for pid in ADOPTED.values():
+        BUDGET.start(pid, EST)
+    print(json.dumps(dict(adopted=len(ADOPTED))), flush=True)
     env = dict(os.environ, LEAN_PATH=lean_path())
     idxs = [i for i in range(a.lo, a.hi) if i % a.mod == a.rem and os.path.exists(os.path.join(ROOT, 'Sqpack', 'V7', f'R{i:05d}.lean'))
             and not os.path.exists(os.path.join(LIB, 'Sqpack', 'V7', f'R{i:05d}.olean'))]
