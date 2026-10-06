@@ -1,4 +1,5 @@
 import Sqpack.LemmaELeaf
+import Sqpack.CapK
 import Sqpack.ZMTreeX
 
 /-!
@@ -207,6 +208,12 @@ theorem CovT.of_exact (hD : 0 < D) (hS : 0 < S) (hR : 0 < R) {lf : LemmaELeaf.Ex
     (h : LemmaELeaf.exOk D S R W x0 x1 y0 y1 u0 u1 segs rects lf = true) :
     CovT D S Mq R W pts segs rects x0 x1 y0 y1 u0 u1 :=
   CovT.of_covMPo (LemmaELeaf.CovMPo.of_exact hD hS hR h)
+
+/-- A `CAP` leaf: Lemma K (`CapK.capOk_sound`). -/
+theorem CovT.of_cap (hD : 0 < D) (hS : 0 < S) (hR : 0 < R) {k : CapK.CapC}
+    (h : CapK.capOk D S R W x0 x1 y0 y1 u0 u1 segs rects k = true) :
+    CovT D S Mq R W pts segs rects x0 x1 y0 y1 u0 u1 :=
+  CovT.of_covMPo (CapK.capOk_sound hD hS hR h)
 
 /-! ## The face `θ = 0` -/
 

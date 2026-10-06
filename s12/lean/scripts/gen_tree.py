@@ -63,10 +63,13 @@ class Glue:
             assert len(rects_list) == 1
             return f"(CovT.of_leb (e := {tuple(rects_list[0])}) {dk} {dk} {dk} {dk} (by decide +kernel))".replace(
                 "(e := (", "(e := (")
-        name, Sl, Rl = self.leaf_names[box]
+        name, Sl, Rl = self.leaf_names[box][:3]
         kS, kR = self.S // Sl, self.R // Rl
         assert kS * Sl == self.S and kR * Rl == self.R
-        t = f"(CovT.of_exact {dk} {dk} {dk} {name})"
+        if len(self.leaf_names[box]) > 3 and self.leaf_names[box][3] == 'cap':
+            t = f"(CovT.of_cap {dk} {dk} {dk} {name})"
+        else:
+            t = f"(CovT.of_exact {dk} {dk} {dk} {name})"
         if kR != 1:
             t = f"(CovT.scaleR' (k := {kR}) {dk} {t})"
         if kS != 1:

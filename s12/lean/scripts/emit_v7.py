@@ -14,6 +14,7 @@ sys.path.insert(0, HERE)
 import gen_exact as G  # noqa: E402
 from gen_tree import Glue  # noqa: E402
 from enc_cert import enc_pc  # noqa: E402
+import capk  # noqa: E402
 from run_v7 import SG, RG, MQ, sorted_cover  # noqa: E402
 
 
@@ -46,10 +47,14 @@ def emit(path, outdir):
     g = Glue(5, SG, RG, 10 ** 12, MQ)
     body = []
     for b, c in d['leaves'].items():
+        if 'capk' in c:
+            body.append(capk.to_lean(c['capk'], c['name'], 5, c['S'], c['R'], 10 ** 12, c['box']))
+            g.leaf_names[b] = (f"{c['name']}_ok", c['S'], c['R'], 'cap')
+            continue
         lf = SimpleNamespace(**c)
         body.append(G.to_lean_split(lf, c['name']))
         g.leaf_names[b] = (f"{c['name']}_ok", c['S'], c['R'])
-    hdr = ["import Sqpack.V7.Data", "import Sqpack.LemmaEDec", "namespace SquarePacking.LemmaELeaf",
+    hdr = ["import Sqpack.V7.Data", "import Sqpack.LemmaEDec", "import Sqpack.CapK", "namespace SquarePacking.LemmaELeaf",
            "open ZMTreeM LemmaEVert LemmaEPoly ZMTree LemmaE", "set_option maxRecDepth 100000",
            "set_option maxHeartbeats 0"]
     txt = "\n".join(hdr + body + [g.root_thm(f"root_{idx:05d}", root, tree, _rects),
@@ -61,7 +66,7 @@ def emit(path, outdir):
     return idx, len(txt)
 
 
-HDR = ["import Sqpack.V7.Data", "import Sqpack.LemmaEDec"]
+HDR = ["import Sqpack.V7.Data", "import Sqpack.LemmaEDec", "import Sqpack.CapK"]
 OPEN = ["namespace SquarePacking.LemmaELeaf", "open ZMTreeM LemmaEVert LemmaEPoly ZMTree LemmaE",
         "set_option maxRecDepth 100000", "set_option maxHeartbeats 0"]
 
@@ -85,8 +90,15 @@ def emit_split(path, outdir, chunk):
     rdir = f"R{idx:05d}"
     imports, oks, total = [], [], 0
     for b, c in d['leaves'].items():
-        lf = SimpleNamespace(**c)
         name = c['name']
+        if 'capk' in c:
+            txt = "\n".join(HDR + OPEN + [capk.to_lean(c['capk'], name, 5, c['S'], c['R'], 10 ** 12, c['box']),
+                                           "end SquarePacking.LemmaELeaf"]) + "\n"
+            _write(os.path.join(outdir, rdir, f"{name}.lean"), txt); total += len(txt)
+            imports.append(f"import Sqpack.V7.{rdir}.{name}")
+            g.leaf_names[b] = (f"{name}_ok", c['S'], c['R'], 'cap')
+            continue
+        lf = SimpleNamespace(**c)
         defs, rows, ok = G.to_lean_parts(lf, name)
         base = f"Sqpack.V7.{rdir}.{name}"
         txt = "\n".join(HDR + OPEN + [defs, "end SquarePacking.LemmaELeaf"]) + "\n"

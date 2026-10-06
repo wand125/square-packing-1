@@ -21,6 +21,7 @@ from gen_tree import Glue  # noqa: E402
 from gen_axis import read_cover  # noqa: E402
 import gen_exact as G  # noqa: E402
 from gen_credit import credit  # noqa: E402
+import capk  # noqa: E402
 
 COVER = os.path.join(HERE, '..', '..', 'certificates', 'k2m3', 'L4_k02_box7.txt')
 LEAVES = os.path.join(HERE, '..', '..', 'certificates', 'k2m3', 'qx2_zm', 'runV3_6294052a_leaves.jsonl.gz')
@@ -99,6 +100,11 @@ def split_box(b, D):
 def certify(b, limit=None):
     Sl, Rl = scales(b)
     ib = [int(x * 5 * Sl) for x in b[:4]] + [int(x * Rl) for x in b[4:]]
+    # Lemma K first (a few exact tests; covers the caps of the Lebesgue rectangle at zero margin)
+    _, D, W, _, segs, rects = _cov
+    k = capk.certify(D, Sl, Rl, W, *ib, segs, [tuple(r) for r in rects])
+    if k is not None:
+        return ('capk', k, ib), 'capk', Sl, Rl
     # the last flag keeps the Lebesgue rectangles; without them the bound is weaker but never negative
     # (the rectangle term `1 - U_x - U_y` goes below 0 where the square barely meets the rectangle)
     # 'credit': no rectangle terms, the rectangle's mass bounded by strips inside every square
@@ -164,6 +170,10 @@ def work(args):
             ax, mid, bl, bh = sp
             return (ax, mid, cert_leaf(bl, k, depth + 1), cert_leaf(bh, k, depth + 1))
         name = f"r{idx:05d}l{n}"
+        if isinstance(lf, tuple) and lf[0] == 'capk':
+            g.leaf_names[b] = (f"{name}_ok", Sl, Rl, 'cap')
+            cert[b] = dict(name=name, S=Sl, R=Rl, capk=lf[1], box=tuple(lf[2]))
+            return ('L', b, k)
         g.leaf_names[b] = (f"{name}_ok", Sl, Rl)
         cert[b] = dict(name=name, S=Sl, R=Rl, D=lf.D, W=lf.W, W0=lf.W0, cred=lf.cred, Q=lf.Q, box=lf.box,
                        wx=lf.wx, wy=lf.wy, ex=lf.ex, ey=lf.ey, chs=lf.chs, cvs=lf.cvs, crs=lf.crs, Ls=lf.Ls,
