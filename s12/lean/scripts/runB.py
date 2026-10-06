@@ -9,7 +9,7 @@ Prints one JSON line per root (`ok`, seconds, the failing modules).
     runB.py --lo I --hi J [--jobs N] [--mod M --rem R]     (run from s12/lean after `lake build` of the common modules)
 """
 import argparse, glob, json, os, re, subprocess, sys, threading, time
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 LIB = os.path.join(ROOT, '.lake', 'build', 'lib', 'lean')
@@ -69,6 +69,8 @@ class MemBudget:
         while True:
             time.sleep(3)
             with self.cv:
+                for pid in [p for p in self.run if not os.path.exists(f'/proc/{p}')]:
+                    del self.run[pid]      # exited (an adopted lean is never waited for)
                 for pid, r in self.run.items():
                     r[2] = max(r[2], rss(pid))
                 if self.run and meminfo('MemAvailable') < self.guard:
@@ -126,6 +128,8 @@ def compile_mod(src, env):
         BUDGET.start(p.pid, c)
         out, _ = p.communicate()
         est, _, peak, killed = BUDGET.finish(p.pid)
+        if p.returncode == -9:       # the watcher may have dropped the entry before `finish`
+            killed, peak = True, max(peak, c)
         if not killed:
             break
         KILLED.append((rel, round(peak, 1)))
@@ -177,8 +181,8 @@ def main():
             and not os.path.exists(os.path.join(LIB, 'Sqpack', 'V7', f'R{i:05d}.olean'))]
     print(json.dumps(dict(todo=len(idxs))), flush=True)
     with ThreadPoolExecutor(a.jobs) as pool, ThreadPoolExecutor(a.roots) as outer:
-        for r in outer.map(lambda i: root_job(i, pool, env), idxs):
-            print(json.dumps(r), flush=True)
+        for f in as_completed([outer.submit(root_job, i, pool, env) for i in idxs]):
+            print(json.dumps(f.result()), flush=True)
 
 
 if __name__ == '__main__':
