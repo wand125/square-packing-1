@@ -82,6 +82,10 @@ lemma vertOkK'_of {c : Ctx} {D W : ℕ} {σ : Bool} {b0 b1 R : ℕ} {chs cvs : L
 
 def dSB : SubBin := ⟨0, true, 0, .out 0 0⟩
 
+/-- The decoder of one encoded sub-bin (`LemmaEDec`): a pair certificate stored as `.bins` of these
+decodes, in a kernel check, only the sub-bins it looks at. -/
+def decSB (cs : List ℕ) : SubBin := (pSubBin (decNums cs)).1
+
 def isVal : Kind → Bool
   | .val _ => true
   | .out _ _ => false

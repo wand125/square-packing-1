@@ -68,6 +68,8 @@ class Glue:
         assert kS * Sl == self.S and kR * Rl == self.R
         if len(self.leaf_names[box]) > 3 and self.leaf_names[box][3] == 'cap':
             t = f"(CovT.of_cap {dk} {dk} {dk} {name})"
+        elif len(self.leaf_names[box]) > 3 and self.leaf_names[box][3] == 'x':
+            t = f"(CovT.of_exactX {dk} {dk} {dk} {name})"
         else:
             t = f"(CovT.of_exact {dk} {dk} {dk} {name})"
         if kR != 1:

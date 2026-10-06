@@ -13,14 +13,22 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import gen_exact as G  # noqa: E402
 from gen_tree import Glue  # noqa: E402
-from enc_cert import enc_pc  # noqa: E402
+from enc_cert import enc_pc, enc_sb  # noqa: E402
 import capk  # noqa: E402
 from run_v7 import SG, RG, MQ, sorted_cover  # noqa: E402
 
 
+def lean_pc(c):
+    """a pair certificate: one encoded number list, or (`XMODE`) one per sub-bin"""
+    if not XMODE:
+        return "decPC [" + ",".join(map(str, enc_pc(c))) + "]"
+    if c == 'par':
+        return "PairCert.par"
+    return "PairCert.bins [" + ", ".join("decSB [" + ",".join(map(str, enc_sb(sb))) + "]" for sb in c) + "]"
+
+
 def to_lean_enc(lf, name):
-    rows = ",\n    ".join("[" + ", ".join("decPC [" + ",".join(map(str, enc_pc(c))) + "]" for c in row) + "]"
-                           for row in lf.certs)
+    rows = ",\n    ".join("[" + ", ".join(lean_pc(c) for c in row) + "]" for row in lf.certs)
     return (f"def {name} : ExLeaf where\n"
             f"  wx := {'true' if lf.wx else 'false'}\n  wy := {'true' if lf.wy else 'false'}\n"
             f"  chs := [{', '.join(G.ltup(e) for e in lf.chs)}]\n"
@@ -66,7 +74,9 @@ def emit(path, outdir):
     return idx, len(txt)
 
 
-HDR = ["import Sqpack.V7.Data", "import Sqpack.LemmaEDec", "import Sqpack.LemmaESplit", "import Sqpack.CapK"]
+XMODE = os.environ.get('V7_X', '0') == '1'   # EXACT leaves through `LemmaELeafX` (rows' minima)
+HDR = ["import Sqpack.V7.Data", "import Sqpack.LemmaEDec", "import Sqpack.LemmaESplit", "import Sqpack.CapK"] + \
+    (["import Sqpack.ExTreeX", "import Sqpack.LemmaESplitX"] if XMODE else [])
 OPEN = ["noncomputable section  -- checked by the kernel only: no compiled code",
         "namespace SquarePacking.LemmaELeaf", "open ZMTreeM LemmaEVert LemmaEPoly ZMTree LemmaE",
         "set_option maxRecDepth 100000", "set_option maxHeartbeats 0"]
@@ -100,7 +110,7 @@ def emit_split(path, outdir, chunk):
             g.leaf_names[b] = (f"{name}_ok", c['S'], c['R'], 'cap')
             continue
         lf = SimpleNamespace(**c)
-        defs, rows, ok = G.to_lean_parts(lf, name)
+        defs, rows, ok = G.to_lean_parts(lf, name, X=XMODE)
         base = f"Sqpack.V7.{rdir}.{name}"
         txt = "\n".join(HDR + OPEN + [defs, "end SquarePacking.LemmaELeaf"]) + "\n"
         _write(os.path.join(outdir, rdir, f"{name}.lean"), txt); total += len(txt)
@@ -116,7 +126,7 @@ def emit_split(path, outdir, chunk):
             _write(os.path.join(outdir, rdir, f"{name}_g{gi}.lean"), txt); total += len(txt)
             imports.append(f"import {base}_g{gi}")
         oks.append(ok)
-        g.leaf_names[b] = (f"{name}_ok", c['S'], c['R'])
+        g.leaf_names[b] = (f"{name}_ok", c['S'], c['R']) + (('x',) if XMODE else ())
     txt = "\n".join(HDR + imports + OPEN + oks + [g.root_thm(f"root_{idx:05d}", root, tree, _rects),
                                                     "end SquarePacking.LemmaELeaf"]) + "\n"
     _write(os.path.join(outdir, f"{rdir}.lean"), txt); total += len(txt)

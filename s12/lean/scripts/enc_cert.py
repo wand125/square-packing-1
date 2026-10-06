@@ -99,6 +99,18 @@ def chunks(nums):
     return out
 
 
+def enc_sb(sb):
+    """one sub-bin (`LemmaESplit.decSB`)"""
+    b1, sig, m, kind = sb
+    out = [b1, 1 if sig else 0, m]
+    if kind[0] == 'out':
+        out += [0, kind[1], kind[2]]
+    else:
+        out.append(1)
+        nums_vc(kind[1], out)
+    return chunks(out)
+
+
 def enc_pc(c):
     out = []
     nums_pc(c, out)

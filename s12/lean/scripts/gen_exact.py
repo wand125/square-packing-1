@@ -552,9 +552,27 @@ def pair_split(lf, name, i, j, cert, sctx, P, U0, U1, W, D, R):
     return "\n".join(out)
 
 
-def to_lean_parts(lf, name, segs="tsegs", rects="trects"):
+def pair_subX(name, i, j, cert, sctx, P, U0):
+    """`LemmaELeafX`: the pair theorem `{name}_{i}_{j}` from one kernel check per sub-bin"""
+    dk = "by decide +kernel"
+    q0 = "((([0], [0], [0]) : PL), PairCert.par)"
+    X = f"(({name}_Z {i}).getD {j} {q0})"
+    S = f"(sbsOf {X}.2)"
+    nm = f"{name}_{i}_{j}"
+    out = [f"theorem {nm}_s{t} : subOkX {sctx} {P} {X}.1 (bAt {U0} {S} {t}) ({S}.getD {t} dSB) = true := {dk}\n"
+           for t in range(len(cert))]
+    tb = f"binsOkX_end {len(cert)} ({dk}) ({dk})"
+    for t in reversed(range(len(cert))):
+        tb = f"binsOkX_step {t} ({dk}) {nm}_s{t}\n    ({tb})"
+    out.append(f"theorem {nm} : {name}_p {i} {X} = true :=\n  pairOkX_of_sbs ({dk})\n    ({tb})\n")
+    return "\n".join(out)
+
+
+def to_lean_parts(lf, name, segs="tsegs", rects="trects", X=False):
     """The leaf in parts: the definitions with the head theorem, one block per row (its pair
-    theorems and the row theorem), and the `exOk` theorem gluing the rows."""
+    theorems and the row theorem), and the `exOk` theorem gluing the rows.  `X`: through
+    `LemmaELeafX` (the vertex test by the rows' minima, `exOkX`)."""
+    x = "X" if X else ""
     x0, x1, y0, y1, U0, U1 = lf.box
     D, S, R, Q = lf.D, lf.S, lf.R, lf.Q
     W = getattr(lf, 'W0', lf.W)
@@ -568,7 +586,7 @@ def to_lean_parts(lf, name, segs="tsegs", rects="trects"):
     defs = [to_lean(lf, name),
             f"def {name}_L : List PL := {side} ++ {name}.Ls\n",
             f"def {name}_Z (i : ℕ) : List (PL × PairCert) := ({name}_L.drop (i + 1)).zip ({name}.certs.getD i [])\n",
-            f"def {name}_p (i : ℕ) : PL × PairCert → Bool := fun q => pairOk {ctx} ({name}_L.getD i {d0}) q.1 q.2\n",
+            f"def {name}_p (i : ℕ) : PL × PairCert → Bool := fun q => pairOk{x} {ctx} ({name}_L.getD i {d0}) q.1 q.2\n",
             f"theorem {name}_head : exHead {args} = true := {dk}\n"]
     rows = []
     for i in range(n):
@@ -576,7 +594,12 @@ def to_lean_parts(lf, name, segs="tsegs", rects="trects"):
         m = len(lf.certs[i]) if i < len(lf.certs) else 0
         for j in range(m):
             cert = lf.certs[i][j]
-            if pair_combos(lf, cert) > SPLIT_MIN:
+            if X and isinstance(cert, list):
+                out.append(pair_subX(name, i, j, cert,
+                                     f"{D} ({W} - credAmt {name}) {R} {side} {name}.chs {name}.cvs {name}.crs "
+                                     f"{name}.hbx {name}.vbx", f"({name}_L.getD {i} {d0})", U0))
+                continue
+            if not X and pair_combos(lf, cert) > SPLIT_MIN:
                 out.append(pair_split(lf, name, i, j, cert,
                                       f"{D} ({W} - credAmt {name}) {R} {side} {name}.chs {name}.cvs {name}.crs "
                                       f"{name}.hbx {name}.vbx", f"({name}_L.getD {i} {d0})",
@@ -586,13 +609,13 @@ def to_lean_parts(lf, name, segs="tsegs", rects="trects"):
         t = f"all_drop_end ({name}_p {i}) ({name}_Z {i}) {m} ({dk})"
         for j in reversed(range(m)):
             t = f"all_drop_step ({name}_p {i}) ({name}_Z {i}) {j} {q0} ({dk}) {name}_{i}_{j}\n    ({t})"
-        out.append(f"theorem {name}_r{i} : rowOk {ctx} ({name}_L.getD {i} {d0}) ({name}_L.drop {i + 1}) "
-                   f"({name}.certs.getD {i} []) = true :=\n  rowOk_of ({dk})\n    ({t})\n")
+        out.append(f"theorem {name}_r{i} : rowOk{x} {ctx} ({name}_L.getD {i} {d0}) ({name}_L.drop {i + 1}) "
+                   f"({name}.certs.getD {i} []) = true :=\n  rowOk{x}_of ({dk})\n    ({t})\n")
         rows.append("\n".join(out))
-    t = f"allPairsOk_drop_end {name}_L ({name}.certs.drop {n}) {n} ({dk})"
+    t = f"allPairsOk{x}_drop_end {name}_L ({name}.certs.drop {n}) {n} ({dk})"
     for i in reversed(range(n)):
-        t = f"allPairsOk_drop_step {name}_L {name}.certs {i} {d0} ({dk}) ({dk}) {name}_r{i}\n    ({t})"
-    ok = f"theorem {name}_ok : exOk {args} = true :=\n  exOk_of {name}_head\n    ({t})\n"
+        t = f"allPairsOk{x}_drop_step {name}_L {name}.certs {i} {d0} ({dk}) ({dk}) {name}_r{i}\n    ({t})"
+    ok = f"theorem {name}_ok : exOk{x} {args} = true :=\n  exOk{x}_of {name}_head\n    ({t})\n"
     return "\n".join(defs), rows, ok
 
 
