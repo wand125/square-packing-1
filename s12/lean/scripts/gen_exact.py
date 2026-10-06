@@ -39,6 +39,7 @@ def svals(L, u, v):
 
 class Leaf:
     USE_TAN = True
+    MIXED_CH = False   # mixed segments without a separating split: the chord only
     # prefer the box-wide alternatives unless the vertex ones cut the combinations by this factor
     BOX_FACTOR = float(os.environ.get('V7_BOX_FACTOR', '1'))
     USE_CORNER = True
@@ -210,6 +211,10 @@ class Leaf:
                 sg = qsign(sp[0])
                 if sg == posl: return [(('drop',), (k, False)), (ch, (k, True))]
                 if [not x for x in sg] == posl: return [(('drop',), (k, True)), (ch, (k, False))]
+            if Leaf.MIXED_CH:
+                # the chord alone is a lower bound everywhere; where the segment only just misses
+                # it is slightly negative, much less than what `drop` loses where it just meets
+                return [(ch, None)]
             return [(('drop',), None), (ch, None)]
         hc = [pick(hUps(self.D, e), hLos(self.D, e), bx) for e, bx in zip(self.chs, self.hbx)]
         vc = [pick(vUps(self.D, e), vLos(self.D, e), bx) for e, bx in zip(self.cvs, self.vbx)]
